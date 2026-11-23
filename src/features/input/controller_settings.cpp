@@ -456,6 +456,10 @@ const char* aimSourceName(AimSource aim) {
     return "head";
 }
 
+bool holdsKeyboardPrompts(const ControllerSettings& settings) {
+    return settings.enabled && settings.buttonPrompts;
+}
+
 AimSource demonAimSource(const ControllerSettings& settings) {
     if (settings.aim == AimSource::View || !settings.demonAim) {
         return settings.aim;

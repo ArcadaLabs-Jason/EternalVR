@@ -2,8 +2,8 @@
 
 // Internal state of the cvars the layer holds (runtime_cvars.hpp), shared by runtime_cvars.cpp (the held
 // list, the engine's setter, apply() and the Route S sets), runtime_cvars_pe.cpp (Parallel Eye Rendering's
-// set, runtime_cvars_pe.hpp) and runtime_cvars_reticle.cpp (hand aim's crosshair hold,
-// runtime_cvars_reticle.hpp).
+// set, runtime_cvars_pe.hpp), runtime_cvars_reticle.cpp (hand aim's crosshair hold,
+// runtime_cvars_reticle.hpp) and runtime_cvars_mono.cpp (head-tracked mono's set).
 
 #include "platform/mp_policy/profile_cvars.hpp"
 #include "stereo_seq/seq_settings.hpp"
@@ -35,6 +35,10 @@ struct Held {
     bool written = false; // the first write is always logged
     std::byte* object = nullptr;
     bool logged = false;
+    // A "?" entry (logQuery): the value last logged, its float and the changes logged after the first.
+    int queryValue = 0;
+    float queryNumber = 0.0f;
+    int queryChanges = 0;
     bool windowSize = false; // r_windowWidth / r_windowHeight of the window set: left alone with the render
                              // size off (windowSizeLeft)
     bool left = false;       // ... and that was logged
@@ -47,6 +51,8 @@ struct Held {
     bool profile = false; // in profile.bin (mp_policy::profileStoredCvar): left alone in profile I/O
     bool yields = false;  // a change in the game's menu ends the hold (the HUD Scale, yieldTurn)
     mp_policy::YieldingHold yield;
+    // The Off set with DLSS per eye (stereoCvarsBeforePlay): not held once per-eye TAA failed closed.
+    bool dlssBeforePlay = false;
 };
 
 // The held list (built by the first apply), under heldMutex().
@@ -76,6 +82,14 @@ void addWindowSet(std::vector<Held>& held, bool mono = false);
 // The cvar's integer value as the engine keeps it (the values block, +0x08).
 int readValue(const std::byte* object);
 
+// The cvar's float value (the values block, +0x0C).
+float readFloat(const std::byte* object);
+
+// runtime_cvars_debug.cpp: one present's reading of a "name=?" entry of ETERNALVR_DEBUG_CVARS (h.value "?",
+// h.object found; `value` its integer value now): logged at the first present, then at each change. Under
+// heldMutex().
+void logQuery(Held& h, int value);
+
 // runtime_cvars_reticle.cpp: hand aim's crosshair hold (ETERNALVR_UI_CROSSHAIR=hold or gun,
 // ui_layer/crosshair.hpp) added to `held` while the UI layer is on, else nothing. From the first apply, under
 // heldMutex(), before the ETERNALVR_DEBUG_CVARS list (whose value entry for the cvar replaces it: the hold is
@@ -96,5 +110,10 @@ void reticleUnchecked();
 // runtime_cvars_pe.cpp: Parallel Eye Rendering's set added to `held` once setParallelEyes asked for it, else
 // nothing. From the first apply, under heldMutex().
 void addParallelEyeSet(std::vector<Held>& held);
+
+// runtime_cvars_mono.cpp: mono's set (applyMono) added to `held`: the mono window set with the render size
+// on, and with `headTracked` photo mode kept off (stereo_seq::monoVrHeldCvars). Logged. From the first apply,
+// under heldMutex().
+void addMonoSet(std::vector<Held>& held, bool headTracked);
 
 } // namespace evr::vkcore::runtime_cvars

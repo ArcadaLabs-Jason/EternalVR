@@ -15,20 +15,25 @@ namespace evr::mp_policy {
 // the layer may hold: view_skipShakes (the comfort set, held 1 in VR), r_sharpening (the launcher's
 // Sharpening) and swf_anchorProfile (the HUD Scale, held at Large in VR; registered with flags 0x2, written
 // through the serializer's generic cvar entry at +0x1A4F, just before view_skipShakes'; its load then lays
-// the game's GUIs out again, 0x182A7B0) and g_setting_photomode (the game's Photo mode setting, held off in
-// VR; registered with flags 0x1 like view_skipShakes, its entry at +0x1DBF). The serializer also writes
-// r_antialiasing and r_raytracedReflectionsTemporalUpscaleQuality, but the profile's load sets both again
-// from its own fields (the DLSS index and the Reflections level), so a held value saved there does not reach
-// the flat game; putting another r_antialiasing in for a save would also switch the renderer's anti-aliasing
-// for that moment. They are left out.
+// the game's GUIs out again, 0x182A7B0). The serializer also writes r_antialiasing and
+// r_raytracedReflectionsTemporalUpscaleQuality, but the profile's load sets both again from its own fields
+// (the DLSS index and the Reflections level), so a held value saved there does not reach the flat game;
+// putting another r_antialiasing in for a save would also switch the renderer's anti-aliasing for that
+// moment. They are left out.
 const std::vector<std::string_view>& profileStoredCvars();
 bool profileStoredCvar(std::string_view name);
 
-// A profile-stored cvar the profile hooks may go without (g_setting_photomode, held off in VR only for
-// comfort): one the game build does not have is left out and logged, and the hooks keep the others; the
-// layer then does not hold it either (vkcore/profile_hooks.hpp, profileKeeps). view_skipShakes,
-// r_sharpening and swf_anchorProfile are not optional: without one of them the hooks stay out, as before.
-bool profileOptionalCvar(std::string_view name);
+// The cvars the game also keeps in the profile's game settings fields (GAME_FIELD_*): it copies their live
+// values into the fields before every profile save (idGameSettings::SetFieldsFromCVars, Steam RVA 0x6ABA90,
+// called before the profile's serializer runs) and sets them from the fields after every load, after the cvar
+// entries (SetCVarsFromFields, 0x6AB320). The profile hooks cover the cvar serializer only, so a value the
+// layer held in one of these would reach the flat game through its field: the layer holds none of them
+// (profile_cvars_tests.cpp checks the held sets it can reach as data; vkcore/runtime_cvars.hpp names the
+// rest). g_setting_photomode, the Photo mode setting, is one: from 0.1.99 to 0.1.101 the layer held it at 0
+// and the saves wrote that 0 into GAME_FIELD_PHOTO_MODE; photo mode is now kept off through g_allowPhotoMode,
+// which nothing saves (stereo_seq::stereoComfortCvars).
+const std::vector<std::string_view>& profileFieldCvars();
+bool profileFieldCvar(std::string_view name);
 
 // The same value: the same number when both read as numbers in full ("1" and "1.0"), else the same text
 // without regard to ASCII case.

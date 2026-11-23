@@ -38,8 +38,10 @@ constexpr const char* kTag = "zoom look";
 constexpr std::size_t kWeaponSupercharge = 0x120;    // idWeapon::superchargeParms[2], weaponDecl first
 constexpr std::size_t kWeaponSuperchargeSize = 0x38; // idWeapon::superchargeParms_t
 // idPlayer's zoom flags byte: zoomedIn is bit 1 (set at the zoom's start, Steam RVA 0x1462EE4, cleared at its
-// end, 0x1462F34). Read on the Steam build only: on Game Pass the bit is not checked yet, so the scoped-zoom
-// hold stays off there (head aim then shows the scope's ring; hand aim holds the reticle anyway).
+// end, 0x1462F34; Game Pass 0x1466654 and 0x14666A4, in a function whose code is the Steam one's with only
+// its relative addresses moved, and every access to +0x736C..+0x7370 in .text is the same 406 instructions in
+// both builds). Read on the builds EternalVR knows (game_build.hpp) only: on another build the scoped-zoom
+// hold stays off (head aim then shows the scope's ring; hand aim holds the reticle anyway).
 constexpr std::size_t kPlayerZoomFlags = 0x736E;
 constexpr std::uint8_t kPlayerZoomedIn = 0x2;
 // scopeZoomed answers no once the viewmodel hook has not run for this long (a menu, a cutscene).
@@ -188,14 +190,13 @@ bool scopedHeld(const Decls& decls) {
     return false;
 }
 
-// Under g_mutex: the player's zoom flag, on the Steam build only (kPlayerZoomFlags).
+// Under g_mutex: the player's zoom flag, on a build EternalVR knows (kPlayerZoomFlags).
 bool playerZoomed(const std::byte* player) {
-    const GameBuild* build = currentGameBuild();
-    if (!build || build->kind != GameBuildKind::Steam) {
+    if (!currentGameBuild()) {
         if (!g_loggedBuild) {
             g_loggedBuild = true;
-            EVR_LOG("%s: %s: the zoom flag is not checked on this build; no reticle hold for a scoped zoom",
-                    kTag, build ? build->name : "unknown build");
+            EVR_LOG("%s: unknown build: the zoom flag is not checked; no reticle hold for a scoped zoom",
+                    kTag);
         }
         return false;
     }

@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cwctype>
+#include <iterator>
 
 namespace evr::stereo_seq {
 
@@ -127,6 +128,18 @@ const std::vector<CvarExpectation>& stereoRuntimeCvars(StereoTemporal temporal) 
     return temporal == StereoTemporal::PerEye ? perEye : off;
 }
 
+std::vector<CvarExpectation> stereoCvarsBeforePlay(bool dlssPerEye, int dlssQuality) {
+    if (!dlssPerEye) {
+        return stereoRuntimeCvars(StereoTemporal::Off);
+    }
+    static constexpr std::string_view kQualities[] = {"0", "1", "2", "3"};
+    std::vector<CvarExpectation> set{{"r_TAASafeMode", "1"}, {"r_antialiasing", "2"}};
+    if (dlssQuality >= 0 && dlssQuality < static_cast<int>(std::size(kQualities))) {
+        set.push_back({"r_dlssQuality", kQualities[dlssQuality]});
+    }
+    return set;
+}
+
 CvarExpectation stereoScatterFilterCvar(bool perEyeHistory) {
     return {"r_lightScatteringTAA", perEyeHistory ? "1" : "0"};
 }
@@ -169,11 +182,17 @@ const std::vector<CvarExpectation>& stereoComfortCvars() {
         // motion blur is (it can make players sick); a float, so a scale such as 0.5 is held too.
         // session-keys.txt restores the player's value after the session.
         {"r_blurRadialScale", "0", true},
-        // Photo mode (the game's Game settings, off by default): a free camera the headset does not follow,
-        // the game paused under it. The game starts it only with this setting on (and g_allowPhotoMode,
-        // Steam build 25216728, RVA 0x143DFB0), so in VR it stays off. The game saves it into profile.bin,
-        // where the profile hooks keep the player's own value (mp_policy::profileStoredCvars).
-        {"g_setting_photomode", "0"},
+        // Photo mode (the game's Game settings, off by default; Right Alt in play): the game paused under a
+        // camera of its own, first person or third person behind the player's body, with a panel of its own.
+        // Not made for VR: on the rig (2026-11-21, mono and stereo) the layer showed it as a menu, the view
+        // still turning with the head, and its third person put the view behind the body. The game starts it
+        // only with g_allowPhotoMode and the player's g_setting_photomode both on (Steam build 25216728, RVA
+        // 0x143DFB0, g_allowPhotoMode first); each map load sets g_allowPhotoMode itself (0x6D61EF; by
+        // players' guides, on for a mission played again), and nothing saves it (no config, not in
+        // profile.bin), so holding it at 0 keeps photo mode off and leaves the player's own setting as it is.
+        // Not g_setting_photomode: the game copies that one into the profile's game settings fields, outside
+        // the profile hooks (mp_policy::profileFieldCvars).
+        {"g_allowPhotoMode", "0"},
     };
     return cvars;
 }
@@ -185,6 +204,17 @@ CvarExpectation stereoHudScaleCvar() {
 std::vector<CvarExpectation> stereoVrHeldCvars() {
     std::vector<CvarExpectation> held = stereoComfortCvars();
     held.push_back(stereoHudScaleCvar());
+    return held;
+}
+
+std::vector<CvarExpectation> monoVrHeldCvars() {
+    std::vector<CvarExpectation> held;
+    for (const CvarExpectation& c : stereoComfortCvars()) {
+        // The underwater warp: one picture for both eyes, so it stays as the game has it.
+        if (!sameName(c.name, "r_waterPostProcess")) {
+            held.push_back(c);
+        }
+    }
     return held;
 }
 

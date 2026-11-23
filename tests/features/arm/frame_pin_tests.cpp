@@ -168,7 +168,7 @@ TEST_CASE("a pinned placement is taken once, in its own frame, for its own hands
 
 TEST_CASE(
     "with the off-hand hook first in a frame, a step of the gun moves the still glove one frame, not two") {
-    // Posed under the last frame's placement (dev main to 0.1.87): the glove is drawn off for two frames at
+    // Posed under the last frame's placement (main to 0.1.87): the glove is drawn off for two frames at
     // every step of the weapon hand, as the rig's captures showed.
     CHECK(run({true, false}).off == 2 * steps());
     // Posed under the frame's own placement: one frame, the frame after the step (the game draws the arm a

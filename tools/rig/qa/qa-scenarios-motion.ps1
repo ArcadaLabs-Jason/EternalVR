@@ -26,9 +26,22 @@
 #       speed, the body under 0.5 m since the line before: on the rig a wall or corner at 1 to 2 m/s of the game's
 #       velocity, the wheel's slow motion at 4.7 m/s), none carried at 1 m/s or more; the wheel's forced view.
 #   photo-mode-held
-#       e1m2's start with the game's Photo mode turned on in play (`g_setting_photomode 1` from the debug schedule,
-#       as its menu sets it): the comfort set holds it (`held at run time` lists it) and writes it back to 0
-#       (`cvars: g_setting_photomode 1 -> 0`).
+#       e1m2's start with the game's Photo mode allowed in play (`g_allowPhotoMode 1` from the debug schedule, as a map
+#       load that allows photo mode sets it): the comfort set holds it (`held at run time` lists
+#       g_allowPhotoMode 0) and writes it back to 0 (`cvars: g_allowPhotoMode 1 -> 0`); the player's own Photo mode
+#       setting is never written (no `cvars: g_setting_photomode` line).
+#   photo-mode-held-mono
+#       The same in head-tracked mono (ETERNALVR_MODE=mono, the render size auto, as the launcher's Mono passes it):
+#       mono's set (the comfort set but the underwater warp) holds g_allowPhotoMode 0 beside the window set and writes
+#       it back; the profile hooks are in (head-tracked mono holds view_skipShakes too).
+#   comfort-held-mono
+#       Head-tracked mono as the launcher's Mono passes it (ETERNALVR_MODE=mono, the render size auto), e1m2's start, a
+#       map load at 8 s (the game saves the profile): the comfort set but the underwater warp held at run time
+#       (`held at run time` lists it, view_skipShakes 1 and pm_noBob 1 among it), the game's own values written over at
+#       the first present (`cvars: pm_noBob 0 -> 1`, `cvars: view_damageBlur 1 -> 0`: the harness's command line has
+#       neither, and on the rig the launcher's did not hold them either, docs/rig-findings/profile-leak.md "Mono"),
+#       r_waterPostProcess never written, the profile hooks in and the game's profile saves seen by them; the suite's
+#       profile check after the run (no held value saved) covers the rest.
 #   launch-booster
 #       e1m2 cp_06c_post_crossroads_post_battery: capitol_target_relay_750 (what the level does) switches on the
 #       game's only booster, capitol_trigger_boost_1 (an idTrigger_SonicBoom, 75 m/s, gravity off), and the
@@ -254,14 +267,54 @@ $motionScenarios = @(
     },
     @{
         Name = 'photo-mode-held'; Kind = 'game'; OnlyByName = $true
-        Proves = 'The game''s Photo mode stays off in VR: the comfort set holds g_setting_photomode 0 and writes it back when it is turned on in play'
-        Env = @('ETERNALVR_DEBUG_COMMANDS=3:god|8:g_setting_photomode 1')
+        Proves = 'The game''s Photo mode stays off in VR: the comfort set holds g_allowPhotoMode 0 and writes it back when the game allows photo mode in play, and leaves the player''s own Photo mode setting alone'
+        Env = @('ETERNALVR_DEBUG_COMMANDS=3:god|8:g_allowPhotoMode 1')
         Timeline = { param($c) Wait-QaSeconds $c 14 }
         Asserts = {
             param($c)
-            Test-QaPresent $c 'cvars: held at run time: .*g_setting_photomode 0' -Regex
-            Test-QaPresent $c 'debug-commands: .*g_setting_photomode 1' -Regex
-            Test-QaPresent $c 'cvars: g_setting_photomode 1 -> 0 (reads 0)'
+            Test-QaPresent $c 'cvars: held at run time: .*g_allowPhotoMode 0' -Regex
+            Test-QaPresent $c 'debug-commands: .*g_allowPhotoMode 1' -Regex
+            Test-QaPresent $c 'cvars: g_allowPhotoMode 1 -> 0 (reads 0)'
+            Test-QaAbsent $c 'cvars: g_setting_photomode'
+        }
+    },
+    @{
+        Name = 'photo-mode-held-mono'; Kind = 'game'; OnlyByName = $true
+        Proves = 'The game''s Photo mode stays off in head-tracked mono too: mono''s set (the comfort set but the underwater warp) holds g_allowPhotoMode 0 beside the window set and writes it back when the game allows photo mode in play; the player''s own setting and the profile left alone'
+        Env = @('ETERNALVR_MODE=mono', 'ETERNALVR_RENDER_SIZE=auto', 'ETERNALVR_DEBUG_COMMANDS=3:god|8:g_allowPhotoMode 1')
+        Timeline = { param($c) Wait-QaSeconds $c 14 }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c "cvars: head-tracked mono: only the window's mode and size (the render size) and the comfort set but the underwater warp (16 cvars) held"
+            Test-QaPresent $c 'cvars: held at run time: r_fullscreen 0, r_windowWidth \d+, r_windowHeight \d+, r_hdrDisplay 0, .*g_allowPhotoMode 0$' -Regex
+            Test-QaPresent $c 'debug-commands: .*g_allowPhotoMode 1' -Regex
+            Test-QaPresent $c 'cvars: g_allowPhotoMode 1 -> 0 (reads 0)'
+            Test-QaAbsent $c 'cvars: g_setting_photomode'
+            Test-QaAbsent $c 'seq: Route S on'
+            Test-QaPresent $c 'profile: profile cvar serializer hooked'
+        }
+    },
+    @{
+        Name = 'comfort-held-mono'; Kind = 'game'; OnlyByName = $true
+        Proves = 'Head-tracked mono holds the comfort set at run time as stereo does (camera shake, view bob, the damage tint and blur, the vignette and the rest; not the underwater warp): the game''s own values written over from the first present and held through a map load, with the profile hooks keeping the player''s own camera shake setting in profile.bin'
+        Env = @('ETERNALVR_MODE=mono', 'ETERNALVR_RENDER_SIZE=auto', 'ETERNALVR_DEBUG_COMMANDS=3:god|8:map game/sp/e1m2_battle/e1m2_battle')
+        Timeline = {
+            param($c)
+            Wait-QaLog $c 'debug-commands: 8\.0 s: map' 40 | Out-Null
+            Wait-QaSeconds $c 25
+            Save-QaXrShot $c 'after-load'
+        }
+        Asserts = {
+            param($c)
+            Test-QaPresent $c "cvars: head-tracked mono: only the window's mode and size (the render size) and the comfort set but the underwater warp (16 cvars) held"
+            Test-QaPresent $c 'cvars: held at run time: r_fullscreen 0, r_windowWidth \d+, r_windowHeight \d+, r_hdrDisplay 0, r_motionblur 0, r_dof 0, r_chromaticAberration 0, r_vignette 0, pm_noBob 1, view_skipKicks 1, view_skipShakes 1, hands_fovScale 1, meatHook_playerViewOverrideMode 1, view_skipDamageEffect 1, view_showPlayerDamageViewEffect 0, view_damageBlur 0, g_skipViewEffects 1, r_blurRadialScale 0, g_allowPhotoMode 0$' -Regex
+            Test-QaPresent $c 'cvars: pm_noBob 0 -> 1 (reads 1); held in VR'
+            Test-QaPresent $c 'cvars: view_damageBlur 1 -> 0 (reads 0); held in VR'
+            Test-QaPresent $c 'debug-commands: 8.0 s: map game/sp/e1m2_battle/e1m2_battle'
+            Test-QaAbsent $c 'cvars: r_waterPostProcess'
+            Test-QaAbsent $c 'seq: Route S on'
+            Test-QaPresent $c 'profile: profile cvar serializer hooked at RVA'
+            Test-QaPresent $c 'profile: the game saved the profile'
         }
     },
     @{

@@ -278,6 +278,129 @@ function Get-QaNestStill($Ctx) {
     return $r
 }
 
+# The chainsaw's first pickup (docs/rig-findings/camera-animations.md section 4): e1m1 at the checkpoint before it,
+# cp_01_post_gk_tutorial (a +map load spawns the pickup, the developer loadout having no chainsaw, but not the checkpoint's
+# own layers, which the pickup does not need), the game's tutorials on (the rig profile has them off), the player put on
+# the floor of the pickup's room 2.2 m short of it, then walking onto it. Its tutorial holds the player still for about
+# 4.8 s (view inhibit 0x1F86F; the game's camera does not move) while the hands bring the chainsaw up, teleports him to
+# the chainsaw training room (79, -1623) and shows its popup, which A (Space) dismisses. It is not an `interact/` sync,
+# so the Pickup animations setting does not touch it. Not a pickup of a save that already holds the chainsaw (Mission
+# Select of the 100% save spawns none).
+$script:QaChainsawCvars = 'ETERNALVR_DEBUG_CVARS=g_setting_tutorials=1;g_setting_hud_auto_dismiss_tutorials=0'
+# The placement at 32 s: the schedule's clock may start before e1m1's intro cutscene, whose skip takes about 25 s
+# (debug-commands.md section 3a); from about 30 s on the player is in play either way.
+$script:QaChainsawSchedule = '3:god|32:setviewpos 35.8 -1553.5 11.6 90|32.5:where'
+$script:QaChainsawRoom = '-> 79\.0 -1623\.0 '
+# The tutorial's popup: on the menu panel with the pointer, or in gamepad mode a menu without a cursor.
+$script:QaChainsawPopup = 'menu: (the game shows its cursor \(a popup over the game|a menu over the game without a cursor)'
+$script:QaChainsawPopupGone = 'menu: (the cursor is gone|the menu without a cursor is gone)'
+$script:QaChainsawTimeline = {
+    param($c)
+    $rest = @('right.aim = 0, -10')
+    if (-not (Wait-QaLog $c 'debug-commands: 32\.0 s: setviewpos' 60)) { Add-QaNote $c 'the placement (32 s) did not run within 60 s'; return }
+    Wait-QaSeconds $c 1.5
+    Save-QaXrShot $c 'before'
+    $mark = Get-QaLogMark $c
+    # Onto it with the move stick: 1.1 m a second or so, the pickup's trigger reached within 2 s.
+    if ($c.Scenario.Pad) { Write-QaPad $c 'ly=32767' } else { Write-QaInput $c ($rest + 'left.stick = 0, 0.5') }
+    $held = Wait-QaLogAfter $c $mark 'controllers: forced view starts \(view inhibited; inhibit 0x1F86F\)' 6
+    if ($c.Scenario.Pad) { Write-QaPad $c '' } else { Write-QaInput $c $rest }
+    if (-not $held) { Add-QaNote $c 'no view inhibit within 6 s of walking onto the chainsaw'; Save-QaXrShot $c 'no-pickup'; return }
+    for ($i = 1; $i -le 6; $i++) { Wait-QaSeconds $c 0.6; Save-QaXrShot $c "hold-$i" }
+    $popup = Wait-QaLogAfter $c $mark $script:QaChainsawPopup 12
+    if (-not $popup) { Add-QaNote $c 'no tutorial popup within 12 s of the pickup'; return }
+    Wait-QaSeconds $c 1; Save-QaXrShot $c 'popup'
+    $mark = Get-QaLogMark $c
+    $gone = $null
+    # A pad closes the tutorial's popup with B; its A does nothing there (rig, 2026-11-21).
+    for ($try = 1; $try -le 3 -and -not $gone; $try++) {
+        if ($c.Scenario.Pad) { Invoke-QaPadPress $c 'b' 0.4 }
+        else { Write-QaInput $c ($rest + 'right.primary = 1'); Wait-QaSeconds $c 0.3; Write-QaInput $c $rest }
+        $gone = Wait-QaLogAfter $c $mark $script:QaChainsawPopupGone 3
+    }
+    if (-not $gone) { Add-QaNote $c 'the popup stayed up after three presses (A, or B on the pad)' }
+    Wait-QaSeconds $c 2; Save-QaXrShot $c 'training-room'
+    Wait-QaSeconds $c 3
+}
+
+# The trace lines of the chainsaw's hold: forced game views with the eye in the pickup's room (y -1556 to -1548), then
+# the ones after the tutorial's teleport up to the forced view's end. Game: the game camera's largest range of pitch, yaw
+# and roll in the hold; View: the written view less the head's, its largest range over the hold and after the teleport
+# up to the end of the forced view, and its largest step between two game views but the teleport's (the game turns the
+# player to the room's facing there: under head aim the view's body turns with it).
+$script:QaCamTraceEye = 'camera: trace \d+: game \((-?[\d.]+) (-?[\d.]+) (-?[\d.]+)\) angles \([^)]*\) written \((-?[\d.]+) (-?[\d.]+) (-?[\d.]+)\) eye \((-?[\d.]+) (-?[\d.]+) (-?[\d.]+)\)( forced)?' + $script:QaCamTraceHead
+function Get-QaChainsawHold($Ctx) {
+    $rows = @(foreach ($m in [regex]::Matches((Get-QaLogText $Ctx), $script:QaCamTraceEye)) {
+        $g = $m.Groups
+        [pscustomobject]@{ Game = @([double]$g[1].Value, [double]$g[2].Value, [double]$g[3].Value)
+            View = @(([double]$g[4].Value - (Get-QaGroupValue $g[11])), ([double]$g[5].Value - (Get-QaGroupValue $g[12])), [double]$g[6].Value)
+            X = [double]$g[7].Value; Y = [double]$g[8].Value; Forced = $g[10].Success }
+    })
+    $r = [ordered]@{ Hold = 0; After = 0; Game = 999.0; View = 999.0; Step = 999.0; Teleport = 0.0 }
+    # The run of forced game views with the most of them in the room (the placement's own forced view is 3 or so).
+    $first = -1; $end = -1; $best = 0
+    for ($i = 0; $i -lt $rows.Count; $i++) {
+        if (-not $rows[$i].Forced -or ($i -gt 0 -and $rows[$i - 1].Forced)) { continue }
+        $j = $i; $n = 0
+        while ($j -lt $rows.Count -and $rows[$j].Forced) { if ($rows[$j].Y -ge -1556 -and $rows[$j].Y -le -1548) { $n++ }; $j++ }
+        if ($n -gt $best) { $best = $n; $first = $i; $end = $j }
+    }
+    if ($first -lt 0) { return $r }
+    $hold = @($rows[$first..($end - 1)] | Where-Object { $_.Y -ge -1556 -and $_.Y -le -1548 })
+    $r.Hold = $hold.Count; $r.After = ($end - $first) - $hold.Count
+    $wrap = { param($d) (($d % 360) + 540) % 360 - 180 }
+    $range = { param($set, $field) $worst = 0.0
+        foreach ($k in 0, 1, 2) {
+            $v0 = ($set[0].($field))[$k]
+            $v = @($set | ForEach-Object { & $wrap (($_.($field))[$k] - $v0) } | Measure-Object -Minimum -Maximum)
+            $worst = [Math]::Max($worst, $v[0].Maximum - $v[0].Minimum)
+        }
+        $worst }
+    $r.Game = & $range $hold 'Game'
+    $r.View = & $range @($rows[$first..($end - 1)]) 'View'
+    $r.Step = 0.0
+    for ($i = $first + 1; $i -lt $end; $i++) {
+        $s = 0.0; foreach ($k in 0, 1, 2) { $s = [Math]::Max($s, [Math]::Abs((& $wrap ($rows[$i].View[$k] - $rows[$i - 1].View[$k])))) }
+        if ([Math]::Abs($rows[$i].X - $rows[$i - 1].X) + [Math]::Abs($rows[$i].Y - $rows[$i - 1].Y) -gt 10) { $r.Teleport = $s } else { $r.Step = [Math]::Max($r.Step, $s) }
+    }
+    return $r
+}
+
+function New-QaChainsawScenario([string]$Name, [string]$Proves, [string[]]$ExtraEnv) {
+    return @{
+        Name = $Name; Kind = 'game'; OnlyByName = $true
+        Proves = $Proves
+        Map = 'game/sp/e1m1_intro/e1m1_intro -checkpoint cp_01_post_gk_tutorial'
+        Env = @('ETERNALVR_AIM=hand', 'ETERNALVR_TEST_CAMERA_TRACE=1', $script:QaChainsawCvars, "ETERNALVR_DEBUG_COMMANDS=$script:QaChainsawSchedule") + $ExtraEnv
+        # profile.bin's name for g_setting_tutorials (rig, 2026-11-21: '0' -> '1' in these runs); the auto dismiss is not in it.
+        ProfileHeld = @('g_setting_tutorials2')
+        Input = @()
+        Timeline = $script:QaChainsawTimeline
+        Asserts = {
+            param($c)
+            Test-QaPresent $c 'controllers: forced view starts \(view inhibited; inhibit 0x1F86F\)' -Regex
+            Test-QaPresent $c ('game: teleport \d+: the player moved [\d.]+ m in one game frame \([^)]*' + $script:QaChainsawRoom) -Regex
+            Test-QaPresent $c $script:QaChainsawPopup -Regex
+            Test-QaPresent $c $script:QaChainsawPopupGone -Regex
+            # Not an interact sync: Pickup animations (either setting) start nothing.
+            Test-QaAbsent $c '\] pickup: (pickup \d+ starts|camera turn \d+ starts)' -Regex
+            # Head-tracked all along: no fallback to the flat screen once in play.
+            $text = Get-QaLogText $c
+            $placed = [regex]::Match($text, 'debug-commands: 32\.0 s: setviewpos')
+            $screen = if ($placed.Success) { [regex]::Matches($text.Substring($placed.Index), 'xr: screen run \d+ starts').Count } else { -1 }
+            Add-QaResult $c 'no screen run (frames on the flat screen) from the placement on' ($screen -eq 0) "$screen screen run(s)"
+            $h = Get-QaChainsawHold $c
+            $detail = '{0} game view(s) held in the pickup''s room, {1} after the teleport to the end of the forced view; the game''s camera moved {2:N2} deg in the hold; the written view less the head''s over a range of {3:N2} deg, largest step {4:N2} (at the teleport {5:N2})' -f
+                $h.Hold, $h.After, $h.Game, $h.View, $h.Step, $h.Teleport
+            # The game holds its own camera still: what the flat game shows for the 4.8 s.
+            Add-QaResult $c 'trace: the hold ran (100 game views or more in the pickup''s room) and the game''s camera stayed still in it (within 1 deg)' ($h.Hold -ge 100 -and $h.Game -le 1) $detail
+            # The view stays on the head: it neither freezes nor jumps (the game's turn at the teleport aside).
+            Add-QaResult $c 'trace: the view stayed on the head through the hold and the teleport (the written view less the head''s within 1 deg, no step over 1 deg but the teleport''s)' ($h.Hold -ge 100 -and $h.Step -le 1 -and ($h.View -le 1 -or $c.Scenario.Aim)) $detail
+            Add-QaNote $c $detail
+        }
+    }
+}
+
 $pickupScenarios = @(
     (New-QaPickupScenario 'pickup-camera' 'The default leaves a pickup camera''s turn out: the written view stays on the head while the game''s camera turns' @() {
         param($c)
@@ -376,7 +499,9 @@ $pickupScenarios = @(
             Add-QaResult $c 'trace: no pitch or roll of the camera written (within 0.5 deg of the head''s)' ($ok -and $e.Tilt -le 0.5) $text
             Add-QaResult $c 'trace: the game''s turn of the player''s angles at the end turns no view (the view on the camera''s last heading after it)' ($ok -and $e.Set -and $e.SetStep -le 1.25 * $e.Tol -and $e.EndOff -le $on) $text
         }
-    }
+    },
+    (New-QaChainsawScenario 'pickup-chainsaw' 'The chainsaw''s first pickup with its tutorial: the 4.8 s hold keeps the view on the head (no freeze, no jump), the teleport to the training room and the popup work' @()),
+    (New-QaChainsawScenario 'pickup-chainsaw-play' 'The chainsaw''s first pickup with Pickup animations: Camera moves: the same as the default (not an interact sync)' @('ETERNALVR_PICKUP_CAMERA=play'))
 )
 
 # Head aim, gamepad mode and view aim (README "Scenarios"): every scenario above once more under head aim with the

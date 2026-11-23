@@ -23,7 +23,9 @@
 //   off (virtual_client::sizeOff: the surface cannot scale to it, as on an AMD driver), r_windowWidth /
 //   r_windowHeight are left to the game (logged): the eyes render at the window's size, and a held size that
 //   differs from it would make the game resize its window and put the swapchain out of date.
-// - Head-tracked mono with the render size on: that set less r_swapInterval (applyMonoWindow), nothing else.
+// - Mono (applyMono): with the render size on, that set less r_swapInterval; head-tracked, the comfort set
+//   but the underwater warp (stereo_seq::monoVrHeldCvars), as under Route S: on the rig most of it never took
+//   from mono's command line; ETERNALVR_DEBUG_CVARS; nothing else.
 // - ETERNALVR_CPU_SAVER="name=value;name=value": the launcher's CPU Saver (launcher/data/cpu-saver.txt,
 //   docs/rig-findings/perf-cpu-cvars.md), cvars that cut the CPU work of each render. A cvar the sets above
 //   hold keeps their value. Unset, empty or "0": nothing.
@@ -41,7 +43,8 @@
 //   its quad is up; runtime_cvars_reticle.hpp):
 //   hud_reticle_styleOverride 0 only while the presenter asks for it (hand aim), the earlier value written
 //   back when it stops asking, and each present's reading reported to the presenter's centre mask.
-// - ETERNALVR_DEBUG_CVARS="name=value;name=value" (rig experiments); "name=?" only logs the value. An entry
+// - ETERNALVR_DEBUG_CVARS="name=value;name=value" (rig experiments); "name=?" only logs the value, at the
+//   first present and at each change seen at a present after it (the first 40 changes). An entry
 //   wins over the layer's own holds: it replaces any of the sets above for the same cvar, and per-eye TAA
 //   (taa_hooks.cpp) leaves that cvar alone (stereo_seq/debug_cvars.hpp).
 //
@@ -49,9 +52,15 @@
 // then the first 12 later writes; the rest are counted. Only while the multiplayer guard allows touching the
 // game. Every write goes through the cvar book (cvar_book.hpp): a trip sets each cvar written back to its
 // value before the layer's first write, except the window set and r_hdrDisplay, which stay (logged). The game
-// saves view_skipShakes, r_sharpening, swf_anchorProfile and g_setting_photomode (photo mode, held off in VR
-// with the comfort set) into the player's profile: profile_hooks.hpp puts the player's own value into each
-// profile save.
+// saves view_skipShakes, r_sharpening and swf_anchorProfile into the player's profile: profile_hooks.hpp puts
+// the player's own value into each profile save. A held cvar must not be one the game also copies into the
+// profile's game settings fields (mp_policy::profileFieldCvars), which those hooks do not cover.
+// profile_cvars_tests.cpp checks the sets it can reach as data: the Route S, mono and v1 sets, Parallel Eye
+// Rendering's anti-aliasing, the reticle hold, the profile hooks' cvars (r_sharpening, the launcher's
+// Sharpening), the launcher's forced-cvars.txt and cpu-saver.txt. Not checked there, and none of the fields'
+// cvars today: the names only this layer's code writes (Parallel Eye Rendering's r_useNewDepthDownscale,
+// r_skipFlares, r_SSR and r_raytracedReflectionsTemporalUpscaleQuality, swf_platformOverride, the per-eye TAA
+// module's own writes in taa_hooks.cpp) and ETERNALVR_DEBUG_CVARS, a rig knob.
 
 #include "stereo_seq/seq_settings.hpp"
 
@@ -74,13 +83,15 @@ inline constexpr std::size_t kRegistrationObject = 14;
 // `stereo`: Route S is on, so the stereo set applies. Cheap after the first call.
 void apply(bool stereo);
 
-// Head-tracked mono with the render size on (the launcher's Mono at the headset's size): from the first
-// present, only the window set of stereo_seq::monoWindowCvars (r_fullscreen 0 and the command line's
-// r_windowWidth / r_windowHeight, as under Route S, and nothing else), so a load path that applies the
-// player's video mode cannot take the one image to the display's size or to full screen. Once the render size
-// is off the size is left to the game as under Route S. Never after apply(true) or Parallel Eye Rendering's
-// apply(false).
-void applyMonoWindow();
+// Mono, from the first present (presenter_copy.cpp): head-tracked (`headTracked`, the launcher's Mono) or the
+// cinema screen with the render size on. With the render size on, the window set of
+// stereo_seq::monoWindowCvars (r_fullscreen 0 and the command line's r_windowWidth / r_windowHeight, as under
+// Route S), so a load path that applies the player's video mode cannot take the one image to the display's
+// size or to full screen; once the render size is off the size is left to the game as under Route S.
+// Head-tracked, the comfort set but the underwater warp (stereo_seq::monoVrHeldCvars; the profile hooks keep
+// the player's own view_skipShakes in profile.bin). Then ETERNALVR_DEBUG_CVARS, and nothing else. Never after
+// apply(true) or Parallel Eye Rendering's apply(false).
+void applyMono(bool headTracked);
 
 // Writes so far (the first write of each cvar included).
 std::uint64_t writes();

@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using evr::stereo_seq::cvarsOnCommandLine;
@@ -85,6 +86,35 @@ TEST_CASE("cvar check: missing, different, overridden and set forms") {
 TEST_CASE("runtime cvars: per-eye temporal effects own the TAA cvars") {
     CHECK(evr::stereo_seq::stereoRuntimeCvars(evr::stereo_seq::StereoTemporal::PerEye).empty());
     CHECK(evr::stereo_seq::stereoRuntimeCvars(evr::stereo_seq::StereoTemporal::Off).size() == 2);
+}
+
+TEST_CASE("runtime cvars: before play, DLSS per eye holds DLSS and its quality") {
+    using evr::stereo_seq::stereoCvarsBeforePlay;
+    const auto value = [](const std::vector<evr::stereo_seq::CvarExpectation>& set, std::string_view name) {
+        for (const auto& c : set) {
+            if (c.name == name) {
+                return std::string(c.value);
+            }
+        }
+        return std::string("(none)");
+    };
+    // TAA (the default): the Off set as it was, the anti-aliasing off until per-eye TAA takes it.
+    const auto taa = stereoCvarsBeforePlay(false, 3);
+    CHECK(taa.size() == evr::stereo_seq::stereoRuntimeCvars().size());
+    CHECK(value(taa, "r_antialiasing") == "0");
+    CHECK(value(taa, "r_dlssQuality") == "(none)");
+    // DLSS: r_antialiasing 2 and the launcher's quality, so the first stereo tick switches neither (each
+    // switch made the game build its DLSS feature again, the first at the output size).
+    for (int q = 0; q <= 3; ++q) {
+        const auto dlss = stereoCvarsBeforePlay(true, q);
+        CHECK(value(dlss, "r_antialiasing") == "2");
+        CHECK(value(dlss, "r_dlssQuality") == std::to_string(q));
+        CHECK(value(dlss, "r_TAASafeMode") == "1");
+    }
+    // The game's own quality (no launcher value), or one out of range: r_dlssQuality left alone.
+    CHECK(value(stereoCvarsBeforePlay(true, -1), "r_dlssQuality") == "(none)");
+    CHECK(value(stereoCvarsBeforePlay(true, 4), "r_dlssQuality") == "(none)");
+    CHECK(value(stereoCvarsBeforePlay(true, -1), "r_antialiasing") == "2");
 }
 
 TEST_CASE("runtime cvars: the scattering filter follows its per-eye history, not the TAA mode") {
@@ -221,6 +251,50 @@ TEST_CASE("mono window cvars: only the window's mode and size, whatever the ster
     }
 }
 
+TEST_CASE("mono held cvars: the comfort set but the underwater warp, at the same values") {
+    // On the rig most of the comfort set never took from mono's command line (the camera shake, view bob,
+    // damage tint and the rest read the player's or the game's values all session), so head-tracked mono
+    // holds it at run time as Route S does. The underwater warp is the one left out: one picture for both
+    // eyes, so it has the depth of the screen it is drawn on.
+    const auto held = evr::stereo_seq::monoVrHeldCvars();
+    const auto& comfort = evr::stereo_seq::stereoComfortCvars();
+    REQUIRE(held.size() + 1 == comfort.size());
+    std::size_t next = 0;
+    for (const auto& c : comfort) {
+        if (c.name == std::string_view("r_waterPostProcess")) {
+            continue;
+        }
+        REQUIRE(next < held.size());
+        CHECK((held[next].name == c.name));
+        CHECK((held[next].value == c.value));
+        CHECK((held[next].fraction == c.fraction));
+        ++next;
+    }
+    bool shakes = false;
+    bool photo = false;
+    bool blurScale = false;
+    for (const auto& h : held) {
+        CHECK((h.name != std::string_view("r_waterPostProcess")));
+        CHECK_FALSE(h.yields); // nothing in it gives way to the game's menu
+        shakes =
+            shakes || (h.name == std::string_view("view_skipShakes") && h.value == std::string_view("1"));
+        photo = photo || (h.name == std::string_view("g_allowPhotoMode") && h.value == std::string_view("0"));
+        blurScale = blurScale || (h.name == std::string_view("r_blurRadialScale") && h.fraction);
+    }
+    CHECK(shakes);
+    CHECK(photo);
+    CHECK(blurScale);
+    // Neither the mono window set nor the HUD Scale (mono leaves the player's HUD Scale alone).
+    for (const auto& w : evr::stereo_seq::monoWindowCvars("game.exe +r_windowWidth 1 +r_windowHeight 1")) {
+        for (const auto& h : held) {
+            CHECK((w.name != h.name));
+        }
+    }
+    for (const auto& h : held) {
+        CHECK((evr::stereo_seq::stereoHudScaleCvar().name != h.name));
+    }
+}
+
 TEST_CASE("launch size watch: the first swapchain is the launch size, a change reports the pixel ratio") {
     evr::stereo_seq::LaunchSizeWatch watch;
     CHECK_FALSE(watch.onSwapchain({0, 0}).has_value());
@@ -322,9 +396,10 @@ TEST_CASE("comfort cvars: HDR and the camera effects are held off, each name onc
     CHECK(value("r_water") == "absent");
     // The dash's radial blur goes with motion blur.
     CHECK(value("r_blurRadialScale") == "0");
-    // Photo mode's free camera, which the headset does not follow, stays off (the profile keeps the
-    // player's own value: profile_cvars_tests.cpp).
-    CHECK(value("g_setting_photomode") == "0");
+    // Photo mode (a paused camera of the game's own, not made for VR) stays off through g_allowPhotoMode,
+    // which nothing saves; the player's own Photo mode setting is left alone (profile_cvars_tests.cpp).
+    CHECK(value("g_allowPhotoMode") == "0");
+    CHECK(value("g_setting_photomode") == "absent");
     for (const auto& c : held) {
         // Float scales: held as floats, so 0.5 is not read as the integer 0, nor 1.15 as 1.
         CHECK(c.fraction == (c.name == "r_blurRadialScale" || c.name == "hands_fovScale"));

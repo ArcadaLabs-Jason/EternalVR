@@ -195,8 +195,9 @@ VkSemaphore XrPresenter::Impl::copyForPresent(VkQueue queue,
         runtime_cvars::apply(true);
     } else if (parallelEyesChangedEngine()) { // the same for Parallel Eye Rendering's set, every frame
         runtime_cvars::apply(false);
-    } else if (!settings.stereo.requested && virtual_client::wanted()) { // mono at the render size
-        runtime_cvars::applyMonoWindow();
+    } else if (!settings.stereo.requested &&
+               (settings.mode == Mode::HeadTracked || virtual_client::wanted())) {
+        runtime_cvars::applyMono(settings.mode == Mode::HeadTracked); // mono: photo mode, the render size
     }
     const stereo_seq::PresentMatch match = seq ? seqTakePresent() : stereo_seq::PresentMatch{};
     if (seq && match.tagged) {

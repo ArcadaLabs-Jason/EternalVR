@@ -252,8 +252,14 @@ else of the v1 set is forced (SSR and the rest stay as the player set them; the 
 interval is the layer's (Desktop window). The writes are not saved: the text configs after such a run carry
 neither key, and the next run reads the player's `r_antialiasing 1` again. `ETERNALVR_STEREO_RUNTIME_CVARS=0`
 leaves the cvars as the game has them. The single policy for these cvars is
-`stereo_seq::stereoRuntimeCvars(StereoTemporal)`: `Off` gives this set, `PerEye` none; a per-eye temporal
-module (per-eye TAA) reports itself with `runtime_cvars::setStereoTemporal(PerEye)` and then owns the TAA
+`stereo_seq::stereoRuntimeCvars(StereoTemporal)`: `Off` gives this set, `PerEye` none. With DLSS per eye
+(`ETERNALVR_STEREO_DLSS=1`) the set held until the first stereo tick is
+`stereo_seq::stereoCvarsBeforePlay`: `r_antialiasing 2` and the launcher's `r_dlssQuality` instead of
+`r_antialiasing 0`, so the game sizes its render for DLSS in the menus and the first stereo tick switches
+nothing (switched there, the game built its first DLSS feature at the output size and again a frame later,
+about 160 ms of the first stereo ticks on the test PC; `rig-findings/dlss-dll.md` section 10); once per-eye
+TAA failed closed that hold stops and the v1 set's `r_antialiasing 0` stands. A per-eye temporal module
+(per-eye TAA) reports itself with `runtime_cvars::setStereoTemporal(PerEye)` and then owns the TAA
 cvars, so the two never write against each other.
 
 **The window and present set is held in both temporal modes** (`stereo_seq::stereoWindowCvars`):
@@ -272,31 +278,39 @@ resize its window mid-session, which that driver answered with `VK_ERROR_OUT_OF_
 **The comfort set is held in both temporal modes too** (`stereo_seq::stereoComfortCvars`): HDR output, motion
 blur and the dash's radial blur (`r_blurRadialScale 0`: the game writes 1 there itself when `r_motionblur` goes
 to 0), depth of field, chromatic aberration, vignette, view bob, the view kicks and shakes, the damage tint and
-blur, the view effects' screen overlays, the underwater screen warp (`r_waterPostProcess 0`: it moves the
-picture the same way in both eyes' screen coordinates, so it has no depth in a headset), the weapon's FOV scale,
-the Meathook's single view turn and the game's Photo mode (`g_setting_photomode 0`: a free camera the headset
-does not follow; the game starts photo mode only with that setting on, RVA 0x143DFB0). The game's
-own settings override the command line here as well (a rig run with them on the command line still wrote
-`pm_noBob 0 -> 1`, `view_damageBlur 1 -> 0` and six more), so in stereo the launcher no longer puts them on the
-command line: the layer's hold sets them, from Route S's first present (`presenter_copy.cpp`, before the
-runtime's session and the first map), and a multiplayer guard trip gives the player's own values back
-(`cvar_book.hpp`). Only `r_hdrDisplay 0` stays on the command line, since the game picks the swapchain's format at
-start-up (a trip leaves it, as it leaves the window set). In mono the layer holds none of these (with the render
-size on, only the window set's `r_fullscreen 0` and size, not `r_swapInterval`: `stereo_seq::monoWindowCvars`,
-docs/VR_HEAD_TRACKED.md "Render size"), so mono launches
-keep them on the command line (`launcher/data/forced-cvars.txt`, `| mono`), all but the underwater warp (one
-picture for both eyes, so it stays as the game has it). The launcher's session restore puts the player's values
-back in the game's text configs either way. Four held cvars are saved into the player's profile (`profile.bin`)
-instead, which no restore covers: `view_skipShakes`, `r_sharpening` (the launcher's Sharpening),
-`g_setting_photomode` and `swf_anchorProfile` (below). In mono none of them is held, and photo mode stays the
-player's setting (a command line value would not hold it either: the profile's load sets it after). Photo
-mode is also held only while the profile hooks keep it (`profileKeeps`): a build whose code lacks the cvar
-leaves it to the player, and the hooks keep the other three. The profile hooks (`vkcore/profile_hooks.hpp`)
-put the player's own value into every profile save and the held one back after it; before them every stereo
-session left `view_skipShakes 1` (no camera shake) in the flat game, which the launcher's one-time repair
-puts back (`docs/rig-findings/profile-leak.md`). A
-change to one of these settings in the game's menu during a VR session is not saved: the hold overrides it, and
-the save writes the value the profile's load gave.
+blur, the view effects' screen overlays, the underwater screen warp (`r_waterPostProcess 0`: it moves the picture
+the same way in both eyes' screen coordinates, so it has no depth in a headset), the weapon's FOV scale, the
+Meathook's single view turn and the game's Photo mode (`g_allowPhotoMode 0`: the game paused under a camera of
+its own, first or third person, which the layer shows as a menu, the view turning with the head, so the third
+person puts the view behind the player's body; the game starts photo mode only with `g_allowPhotoMode` and the
+player's `g_setting_photomode` both on, RVA 0x143DFB0, and each map load sets `g_allowPhotoMode` itself (by
+players' guides, on for a mission played again), which nothing saves). The game's own settings override the
+command line here as well (a rig run with them on the command line still wrote `pm_noBob 0 -> 1`,
+`view_damageBlur 1 -> 0` and six more), so in stereo the launcher no longer puts them on the command line: the
+layer's hold sets them, from Route S's first present (`presenter_copy.cpp`, before the runtime's session and the
+first map), and a multiplayer guard trip gives the player's own values back (`cvar_book.hpp`). Only `r_hdrDisplay
+0` stays on the command line, since the game picks the swapchain's format at start-up (a trip leaves it, as it
+leaves the window set). Head-tracked mono holds the same set from its first present, all but the underwater
+warp (one picture for both eyes, so it stays as the game has it; `stereo_seq::monoVrHeldCvars`; with the render
+size on, beside the window set's `r_fullscreen 0` and size, not `r_swapInterval`: `stereo_seq::monoWindowCvars`,
+docs/VR_HEAD_TRACKED.md "Render size"). Mono launches also keep it on the command line
+(`launcher/data/forced-cvars.txt`, `| mono`), but on the rig most of it never took there: from the first present
+to the end of the session `pm_noBob`, the kicks and shakes, the damage tint and blur, the view effects' overlays,
+the vignette, the weapon's FOV scale and the Meathook's view turn read the game's values, `view_skipShakes` the
+profile's, and the game wrote `r_blurRadialScale 1` itself (docs/rig-findings/profile-leak.md, "Mono"). Until
+this hold, mono kept only photo mode off. The cinema screen holds none of it. The launcher's session restore puts
+the player's values back in the game's text configs either way. Three held cvars are saved into the player's profile
+(`profile.bin`) instead, which no restore covers: `view_skipShakes`, `r_sharpening` (the launcher's Sharpening)
+and `swf_anchorProfile` (below). No held cvar may be one of the 16 the game also keeps in the profile's game
+settings fields (`mp_policy::profileFieldCvars`: it copies them into the `GAME_FIELD_*` fields before every
+profile save and sets them from those fields after every load, outside the profile hooks). 0.1.99 to 0.1.101 held
+`g_setting_photomode 0`, one of them, and so left the player's Photo mode off in the flat game after a VR session
+(docs/rig-findings/profile-leak.md, "Photo mode"). The profile hooks (`vkcore/profile_hooks.hpp`, under Route S,
+Parallel Eye Rendering and head-tracked mono) put the player's own value into every profile save and the held one
+back after it; before them every stereo session left
+`view_skipShakes 1` (no camera shake) in the flat game, which the launcher's one-time repair puts back
+(`docs/rig-findings/profile-leak.md`). A change to one of these settings in the game's menu during a VR session
+is not saved: the hold overrides it, and the save writes the value the profile's load gave.
 
 **The game's HUD Scale is held at Large** (`stereo_seq::stereoHudScaleCvar`: `swf_anchorProfile 2`; the game's
 Settings, HUD Scale: 0 Small, 1 Medium, 2 Large) beside the comfort set, under Route S and Parallel Eye Rendering.
@@ -1278,7 +1292,7 @@ order, drawn by> i<image> c<presenter copy> v<view record> | ...`, four presents
   bound its own half every time. Not yet in the headset. Their intensity and fades come from each view's own
   position and axis (32.5 mm apart).
   Rechecked after the pending bits' clear and the per-view marks (rig runs pf3-f-*, pf3-g-* to pf3-i-*): at 9 m
-  eye L 636 / eye R 384, Route S 635 / 383 on this build and 636 / 383 on dev main's layer; a 240 s walking run, a
+  eye L 636 / eye R 384, Route S 635 / 383 on this build and 636 / 383 on main's layer; a 240 s walking run, a
   run with two swapchain recreates (`r_hdrDisplay` 1 then 0), one with a death and the checkpoint's respawn, and
   the Fortress of Doom with 2 flares in view: every copy of a view's own queries waited (18,610 in the walking
   run), no view 0 latch found a pending bit left set, no copy found a bit its view did not mark, no stall, no

@@ -207,7 +207,8 @@ namespace EternalVR.Launcher.Core.Launch
             if (!string.IsNullOrEmpty(inputs.LogDir)) Set("ETERNALVR_LOG_DIR", inputs.LogDir);
             Set("ETERNALVR_WORLD_SCALE", LauncherSettings.ClampWorldScale(s.WorldScale).ToString("0.00", CultureInfo.InvariantCulture));
             if (stereo) Set("ETERNALVR_MODE", "stereo");
-            // The layer's profile hooks run in stereo only, so the repair is asked for only there.
+            // The one-time repair stays stereo only, though the layer's profile hooks now run in head-tracked mono too: mono
+            // held no view_skipShakes before those hooks, so no mono session left it in profile.bin.
             if (stereo && inputs.ProfileRepair) Set(Safety.ProfileRepair.Variable, "1");
             // One eye per game tick for slower processors, always or only while the processor cannot keep up
             // (docs/rig-findings/alternate-eye.md); explicit either way. Not with Parallel Eye Rendering, which ignores it.

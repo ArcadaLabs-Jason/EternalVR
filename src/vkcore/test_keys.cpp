@@ -31,7 +31,8 @@ std::optional<std::uint8_t> virtualKey(const std::wstring& name) {
     };
     static constexpr Named kNamed[] = {{L"ESC", VK_ESCAPE}, {L"ENTER", VK_RETURN}, {L"SPACE", VK_SPACE},
                                        {L"TAB", VK_TAB},    {L"UP", VK_UP},        {L"DOWN", VK_DOWN},
-                                       {L"LEFT", VK_LEFT},  {L"RIGHT", VK_RIGHT}};
+                                       {L"LEFT", VK_LEFT},  {L"RIGHT", VK_RIGHT},  {L"LALT", VK_LMENU},
+                                       {L"RALT", VK_RMENU}};
     for (const Named& n : kNamed) {
         if (name == n.name) {
             return n.key;

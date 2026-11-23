@@ -684,7 +684,7 @@ Required for v1
       `game-motion` branch, not yet seen in a headset) the comfort vignette took the jump pads, boosters and the
       slam (a launch pulse; the slam's reading fixed and seen on the rig on 2026-11-20, `launch-hammer`) and
       rides that carry the body (one general rule; the Phobos elevator and the Cultist Base tram on the rig), and
-      photo mode is held off (not in mono): 26 handled, 1 in part (row 20: the Doom Hunter Base tram did not carry
+      photo mode is held off (in mono too): 26 handled, 1 in part (row 20: the Doom Hunter Base tram did not carry
       the player on the rig, four other rides not run), all listed in KNOWN-ISSUES. Lines were added for the
       handled states that logged none (pickups with Still view, climbs, deaths, the cinema screen's runs, which
       cover loading screens) and, on 2026-11-18, teleports (row 12: a line of its own whatever the settings); still

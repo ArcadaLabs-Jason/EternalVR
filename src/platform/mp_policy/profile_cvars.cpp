@@ -11,8 +11,7 @@
 namespace evr::mp_policy {
 
 const std::vector<std::string_view>& profileStoredCvars() {
-    static const std::vector<std::string_view> cvars{"view_skipShakes", "r_sharpening", "swf_anchorProfile",
-                                                     "g_setting_photomode"};
+    static const std::vector<std::string_view> cvars{"view_skipShakes", "r_sharpening", "swf_anchorProfile"};
     return cvars;
 }
 
@@ -25,8 +24,27 @@ bool profileStoredCvar(std::string_view name) {
     return false;
 }
 
-bool profileOptionalCvar(std::string_view name) {
-    return sameCvarName(name, "g_setting_photomode");
+const std::vector<std::string_view>& profileFieldCvars() {
+    // In the fields' order, GAME_FIELD_WEAPON_AUTOSWITCHONEMPTY to GAME_FIELD_DASH_STYLE.
+    static const std::vector<std::string_view> cvars{
+        "g_weaponAutoSwitchOnEmpty",  "g_weaponAutoEquipNew",
+        "g_weaponDoomClassicPose",    "g_reticleMode",
+        "g_setting_compass",          "g_setting_hud_show",
+        "g_setting_interact_prompt",  "g_setting_gk_highlight",
+        "g_setting_boss_health",      "g_setting_objectiveMarkers",
+        "g_setting_hudNotifications", "g_setting_combatScoring",
+        "g_setting_tutorials",        "g_setting_aim_assist",
+        "g_setting_photomode",        "g_settings_dashStyle"};
+    return cvars;
+}
+
+bool profileFieldCvar(std::string_view name) {
+    for (const std::string_view c : profileFieldCvars()) {
+        if (sameCvarName(c, name)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool sameCvarValue(std::string_view a, std::string_view b) {

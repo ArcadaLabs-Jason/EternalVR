@@ -170,8 +170,10 @@ add_library(evr_layer SHARED
     ring_trace.cpp
     window_timing.cpp
     runtime_cvars.cpp
+    runtime_cvars_mono.cpp
     runtime_cvars_pe.cpp
     runtime_cvars_reticle.cpp
+    runtime_cvars_debug.cpp
     runtime_cvars_yield.cpp
     profile_hooks.cpp
     pe_flares.cpp

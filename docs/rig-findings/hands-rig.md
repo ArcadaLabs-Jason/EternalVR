@@ -497,7 +497,7 @@ right glove does hold it, puts it at `(-0.170, -0.041, -0.074)`. For these two t
 plus that common offset, and the row puts it on the target: the gun sits in the hand, with no right glove on it.
 (Section 11 corrects the reading: the right glove is not parked off the gun but holds its rear top handle.)
 
-Before (`hg-main1`, dev main 0.1.60, every weapon on the `default` row) and after (`hg-grip1`, the rows in
+Before (`hg-main1`, main 0.1.60, every weapon on the `default` row) and after (`hg-grip1`, the rows in
 `data/weapons/viewmodel_offsets.toml`), the wrist (or grip point) from its target in the grip's frame, cm, forward /
 left / up; the owner's headset estimate is where the real hand was against the in-game one (headset 2026-10-13,
 Quest 3, rough inches; minus the rig's miss is the same quantity):
@@ -561,7 +561,7 @@ wrist and fingers into the Heavy Cannon's grip on both guns (the ballista's wris
 on the target. Checker: `grip_check.py` as in section 10 with `--glove --read`: the glove's own wrist as read
 back from the game (what landed), never the grip-point stand-in.
 
-| Weapon | Before (`hg-grip3`, dev main): glove wrist miss, median / largest | After (`ga-grip3`) |
+| Weapon | Before (`hg-grip3`, main): glove wrist miss, median / largest | After (`ga-grip3`) |
 |---|---|---|
 | chaingun | 72.3 / 72.5 cm | 0.1 / 0.3 cm |
 | ballista | 48.0 / 48.2 cm | 0.2 / 0.5 cm |
@@ -612,7 +612,7 @@ weapon mod ran whichever mod the save has equipped) and a reload (none was trigg
 
 One simulator run per build with a plan of taps, presses, holds (five and a view hold per item, as in section 11)
 and console steps; the debug schedule's allow-list now takes `removeInventoryItem`, `judgementMeter_Set` and
-`chrispy` (rig tests only, like the rest of it). Before: `gr-main1` (dev main, every item below on the `default`
+`chrispy` (rig tests only, like the rest of it). Before: `gr-main1` (main, every item below on the `default`
 row); after: `gr-rows1` (the Unmaykr's and the Crucible's rows). Evidence: rig (the simulator gives the grip and
 the aim one pose), not a headset.
 
@@ -678,7 +678,7 @@ frame; without it an override's rotation, scale and translation become the joint
 are. SetJointMod stores the flags it is handed. The layer's overrides were 0x22B (model space); the glove's are now
 0x22A (features/arm/parent_frames.hpp; VR_HANDS_HUD.md, "In the gun's frame").
 
-**The cause, per tick** (`gl-before`: dev main's model-space glove with a per-tick trace, the weapon-mod and fire
+**The cause, per tick** (`gl-before`: main's model-space glove with a per-tick trace, the weapon-mod and fire
 sequence of `ga-mod1` on both guns; `gl_ticks.py`). Per tick, the glove's wrist as read back in the gun's root
 frame against where it was meant to land, and how far the root moved at the grip between the read the write was
 placed under and the frame the game drew it in:
@@ -743,7 +743,7 @@ hands still; `hs-sweep.sh`, checked by `hitch_check.py`):
 
 | Run | Layer | Hitches handed back | Weapon arm weight after | Off hand's written wrist off its target |
 |---|---|---|---|---|
-| `sg-hb1` | dev main | 12 of 12 (both arms, `untracked`) | 0 (1 to 2 of the 4 dump lines in the next second posed by the game) | up to 24.0 cm while it blended back |
+| `sg-hb1` | main | 12 of 12 (both arms, `untracked`) | 0 (1 to 2 of the 4 dump lines in the next second posed by the game) | up to 24.0 cm while it blended back |
 | `sg-hf2` | views by ticks only | 0 of 12 | 1.00 | 0.0, then from the Heavy Cannon's second hitch on growing to 36.3 cm and staying |
 | `sg-hf3` | views by ticks and the clean read by ticks | 0 of 12 | 1.00 | 0.0 (HITCH PASS 12/12) |
 
@@ -784,7 +784,7 @@ glove's against the right hand's in the right controller's).
 
 `lf-free4`'s misses were along the grip's left: the gun's root is turned from the model's axes (the combat
 shotgun's by its own sight line), so the left glove's grip, reflected across the root's plane, is not the right one
-reflected across a plane of the model's. Every gun's sight line reads as in the right hand (the dev main sweep of
+reflected across a plane of the model's. Every gun's sight line reads as in the right hand (the main sweep of
 section 11 gave the same largest angles per gun to 0.01 degree; the plasma rifle, the rocket launcher and the BFG
 have no sight row).
 
@@ -824,11 +824,11 @@ left glove does, reflected. The left glove from the left hand: 0.1 to 0.2 cm med
 eight guns; the sights check passes (0.20 degrees at most). The captures show the right glove on the combat
 shotgun's fore-end from the right, and on the chaingun's right side, where the game's left glove holds its left.
 
-**Right-handed play** (the same build): the grip sweep `rh-grip1` against section 13's `gl-grip` (dev main's
+**Right-handed play** (the same build): the grip sweep `rh-grip1` against section 13's `gl-grip` (main's
 glove): every gun's glove from the real hand within 0.1 cm of it (GRIP PASS, 0.0 to 0.2 cm median, 0.5 at most),
 the derived rows within 1 mm, the sights' largest angles within 0.01 degree (SIGHTS PASS); the merge-QA hands
 check (`lf-hands2`, and `lf-hands3` after the hand-back fixes, the Release build): 0 regressions against its baseline, the same known-bistable warns
-on roll-R+150 and the same standing R:reach finding as dev main's `sg-hands4`.
+on roll-R+150 and the same standing R:reach finding as main's `sg-hands4`.
 
 **Not run**: a headset; the Unmaykr, the Crucible, the hammer, glory kills and melee with the weapon in the left
 hand.
@@ -940,7 +940,7 @@ fists.
 
 `e4m1_rig`, `teleport bubbles_underwater_1`, then no input for 50 s: the camera does not move in any capture, and the
 held item changes every 0.5 to 12 s between the swim's fists and the gun held before the dive (the shotgun, or the
-Heavy Cannon in one run). The runs before (`hw-m-r`, `hw-m-l`: dev main's layer) and after (`hw-c-r`, `hw-c-l`; `hw-b-*`
+Heavy Cannon in one run). The runs before (`hw-m-r`, `hw-m-l`: main's layer) and after (`hw-c-r`, `hw-c-l`; `hw-b-*`
 an earlier build of the change) take captures every 12 frames through it (`hw-sweep.ps1`, `hc-sweep.ps1` with this
 branch's owner and worktree; `hw-m1.sh`, `hw-a1.sh`; the dump checked by `hb_check.py` and `water_check.py`, which
 splits it by state). Evidence: rig, and static where marked.
@@ -958,7 +958,7 @@ splits it by state). Evidence: rig, and static where marked.
 - **Captures** [rig]: in the gun's periods only the swim's open hand shows (`hw-m-r`, 13:34:19 and 13:34:32: no gun).
   The gun shows for one or two captures (0.1 to 0.3 s) as the game raises or lowers it at a change of the held item,
   the glove closed on it, while the game has the arms for that action (`action 10`, BringDown); with the weapon in the
-  left hand nothing shows in those periods on dev main (`hw-m-l`: the left glove on the gun's parked root, 1.3 m back).
+  left hand nothing shows in those periods on main (`hw-m-l`: the left glove on the gun's parked root, 1.3 m back).
 - **The hands' state** [static: the reflected type info of build 25216728; rig: the layer's trace lines]. The hands'
   flag `swimming` (idHands::handsFlags_t, bit 35) is set from 0.2 to 0.9 s after the teleport through the swim's fists and
   the gun's periods (69 of 79 trace lines in the water in `hw-a-r`, 142 of 169 in `hw-m-r`; clear only on the lines
@@ -978,7 +978,7 @@ place and hold the arms as the swim's fists' while the hands swim (DECISIONS T-1
 **Before and after**, the weapon hand's glove (the wrist) from the real hand's wrist point, median / largest over the
 lines the layer posed at weight 1, cm; "settled" leaves out the first two lines (0.5 s) after the arms blend in:
 
-| Hand | State | Before (dev main) | Before, settled | After | After, settled |
+| Hand | State | Before (main) | Before, settled | After | After, settled |
 |---|---|---|---|---|---|
 | right | the gun in the slot, the arms swimming | 29.7 / 38.4 (`hw-m-r`, Heavy Cannon); 34.4 / 42.6 (`hc-swr`, shotgun) | 28.3 / 38.4 (`hw-m-r`); 34.6 / 42.6 (`hc-swr`) | 6.2 / 38.1 (`hw-c-r`) | 5.7 / 17.1 |
 | right | the swim's fists held | 5.4 / 84.0 | 5.8 / 18.4 | 5.2 / 40.9 | 5.2 / 17.9 |
@@ -1108,7 +1108,7 @@ slot-8 touch brought it out, and the weapon-mod switch then changed between it a
 given and, per slot, a 0.4 s touch, five holds, the weapon-mod switch, five holds; slot 8 twice; 90 holds, 2 or 3 dump
 lines each; the dump now also writes `mods`, the held weapon's overrides, and `sight`, the row the layer turned it
 by): `s2-off1` this branch with `ETERNALVR_WEAPON_SIGHTS=0` (the rows' source: each new row is the centre of the
-line's spread there, as in section 6), `s2-main1` the 0.1.75 build (dev main: the five rows of section 6, the mod not
+line's spread there, as in section 6), `s2-main1` the 0.1.75 build (main: the five rows of section 6, the mod not
 read), `s2-on1` this branch. The checker next to it (`sights2_check.py`: section 6's `sights_check.py` per weapon and
 mod) picks the weapon-space line by the dumped mods (the precision bolt's scope, else section 6's lines); for
 `s2-main1`, whose dump has no mods, the mod per hold group comes from its zoom look lines (the bolt first, as in the
@@ -1190,7 +1190,7 @@ were written), the grip sweep's holds with `bind`, per held item and mod, the se
 1.6 mm on every gun and mod (the combat shotgun 1.5 / 1.6 mm median / largest; the other eight guns and the Unmaykr
 0.1 to 0.2 / 0.2 to 0.5) before the B changes (`ab-a-grip`) and after (`ab-b-grip`); with the weapon in the left hand
 both arms at most 1.0 mm (`ab-a-lefty`, `ab-b-lefty`). No change was needed. The default solve, which does not write
-past its targets, reads 4.5 to 35 mm (`ab-b-gripd`, as dev main's sights runs), the read 95 % of the way.
+past its targets, reads 4.5 to 35 mm (`ab-b-gripd`, as main's sights runs), the read 95 % of the way.
 
 **B, the ballista's shoulder end.** With the glove on a grip every modifier is held in its parent's frame
 (section 13), so in the frame of a shot the forearm, elbow and shoulder end ride the gun's kick and the shoulder end
@@ -1693,7 +1693,7 @@ before and is the one read at that frame's off-hand hook; the frame draws it und
 agree (below). The writes land: read-back 0.03 to 0.08 cm from the write in every run, so the blend's share of the
 game's weapon lag (mod_mix.hpp) is not the cause.
 
-**Before** (dev main's arms with the record and the line; frames with the still glove drawn over 1 cm from its
+**Before** (main's arms with the record and the line; frames with the still glove drawn over 1 cm from its
 controller, of those at full weight):
 
 | Aim smoothing | Over 1 cm | 95th percentile | Largest |
@@ -1763,7 +1763,7 @@ sweep stops (a frame of overshoot by the last frame's motion, where the pin is s
 sweep's own motion is uneven on the rig (0.2 to 12.6 degrees from one frame to the next within a sweep, the camera
 hook's times varying), as a real hand's would be too.
 
-**Nothing else moves** (aim smoothing 0.3, this branch against dev main's arms with the record): the Heavy Cannon
+**Nothing else moves** (aim smoothing 0.3, this branch against main's arms with the record): the Heavy Cannon
 (given and the shotgun taken at the start, `oj-reg-hc` / `oj-regm-hc`): frames over 1 cm 338 of 4771 against 535 of
 4735, the largest 9.1 cm against 9.4; `ETERNALVR_ARM_SOLVE=animated` (`oj-reg-anim` / `oj-regm-anim`): the same
 on both, the read wrist 20.8 cm from the written one at the median in every frame (the animated solve's change

@@ -59,6 +59,7 @@ constexpr const char* kPresetForQuality[] = {
     "DLSS.Hint.Render.Preset.UltraQuality", "DLSS.Hint.Render.Preset.DLAA",
 };
 constexpr int kLoggedFailures = 32;
+constexpr std::uint64_t kLoggedReleases = 16;
 constexpr int kMaxTestFailures = 100;
 
 CreateFn g_create = nullptr;
@@ -322,13 +323,22 @@ int releaseHook(void* handle) {
         }
     }
     // The twin is the layer's own feature: released with the game's even after a guard trip.
+    const unsigned twinId = twin ? handleId(reinterpret_cast<const void*>(twin)) : 0u;
     if (twin) {
         const int r = g_release(reinterpret_cast<void*>(twin));
         if (r != kNgxSuccess) {
             EVR_LOG("%s: eye R's DLSS feature could not be released (0x%X)", kTag, static_cast<unsigned>(r));
         }
     }
-    ++g_counters.releases;
+    // The game releases a feature when it makes one with other sizes or another quality (0x1CC5760) and when
+    // DLSS is turned off (0x1CC5F00): which of the create lines' features are gone.
+    if (++g_counters.releases <= kLoggedReleases) {
+        char withTwin[64] = "";
+        if (twin) {
+            std::snprintf(withTwin, sizeof(withTwin), ", and eye R's feature %u with it", twinId);
+        }
+        EVR_LOG("%s: the game released its DLSS feature %u%s", kTag, handleId(handle), withTwin);
+    }
     return g_release(handle);
 }
 

@@ -62,20 +62,23 @@ constexpr std::string_view kAllowedCommands[] = {
     // The Meat Hook on the rig (tools/rig/qa/qa-scenarios-meathook.ps1): demons held where they were brought.
     "ai_freezeMovement",
     // Cvars set in the map (rig scripts, tools/rig/cpu-cvar-ab.ps1); a change of r_hdrDisplay makes the next
-    // frame recreate the swapchain.
+    // frame recreate the swapchain. Rig only: g_setting_tutorials here and g_setting_photomode below are
+    // game settings fields' cvars (mp_policy::profileFieldCvars), so a schedule's value reaches the profile.
     "g_dumpSpawnedEntities", "g_setting_hud_auto_dismiss_tutorials", "g_setting_tutorials",
     "p_debugAnimatedCamera", "r_sharpening", "is_update", "is_defrag", "r_skipGPUParticles", "r_hdrDisplay",
     "r_refractionMaxUpdates",
     // The HUD Scale changed in play as the game's menu changes it (a write the layer did not make; the
     // hold yields to it: runtime_cvars_yield.cpp).
     "swf_anchorProfile",
-    // Photo mode turned on in play as the game's menu turns it on: the comfort set's hold puts it back to 0
-    // (tools/rig/qa/qa-scenarios-motion.ps1, photo-mode-held).
-    "g_setting_photomode",
+    // Photo mode allowed in play as a map load that allows it does, with the player's own setting on: the
+    // comfort set's hold puts g_allowPhotoMode back to 0 and leaves the setting alone
+    // (tools/rig/qa/qa-scenarios-motion.ps1, photo-mode-held); a bare name prints the value to the console.
+    "g_allowPhotoMode", "g_setting_photomode",
     // The piloted Revenant's rockets, their paths drawn (tools/rig/qa/qa-scenarios-demon.ps1,
     // revenant-rockets).
     "g_projectileDebug", "g_projectileDebugLifetime",
-    // Ray tracing off for a mono reference run, where the layer holds no cvars at run time and the profile's
+    // Ray tracing off for a mono reference run, where the layer does not hold it at run time and the
+    // profile's
     // value wins over the command line (docs/rig-findings/perf-targets.md).
     "r_useRayTracing"};
 

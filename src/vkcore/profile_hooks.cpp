@@ -1,7 +1,6 @@
 #include "vkcore/profile_hooks.hpp"
 
 #include "platform/mp_policy/profile_cvars.hpp"
-#include "platform/mp_policy/saved_cvars.hpp"
 #include "vkcore/cvar_book.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/hook_guard.hpp"
@@ -18,6 +17,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cwchar>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -56,7 +56,6 @@ SerializeFn g_original = nullptr;
 cvar_book::SetStringFn g_set = nullptr;
 std::vector<ProfileCvar> g_cvars; // filled before the hook goes in, then only `loaded` changes
 std::once_flag g_installOnce;
-std::atomic<bool> g_hooked{false}; // the hook is in; g_cvars no longer changes in size
 std::atomic<int> g_calls{0};
 // The one-time repair (mp_policy::profileRepair), decided at the first load; under heldMutex.
 bool g_repairAsked = false;
@@ -300,12 +299,7 @@ bool locate(const GameImage& image, const std::byte*& serializer) {
     }
     for (std::size_t i = 0; i < names.size(); ++i) {
         if (!objects[i]) {
-            if (!mp_policy::profileOptionalCvar(names[i])) {
-                return false;
-            }
-            EVR_LOG("%s: %.*s not found in this build: left out of the profile's protection, and not held",
-                    kTag, static_cast<int>(names[i].size()), names[i].data());
-            continue;
+            return false;
         }
         g_cvars.push_back(ProfileCvar{names[i], objects[i], std::nullopt});
     }
@@ -316,6 +310,14 @@ bool locate(const GameImage& image, const std::byte*& serializer) {
         return false;
     }
     return true;
+}
+
+// The launcher's Mono, head-tracked (ETERNALVR_MODE neither stereo nor cinema): the layer holds the comfort
+// set there too (runtime_cvars.hpp, applyMono), view_skipShakes among it.
+bool headTrackedMonoRequested() {
+    std::wstring mode;
+    readEnv(L"ETERNALVR_MODE", mode);
+    return _wcsicmp(mode.c_str(), L"stereo") != 0 && _wcsicmp(mode.c_str(), L"cinema") != 0;
 }
 
 } // namespace
@@ -333,7 +335,8 @@ void profilePlayerChoice(std::string_view name, const std::string& value) {
 
 void installProfileHooks() {
     std::call_once(g_installOnce, [] {
-        if (!(routeSRequested() || parallelEyesChangedEngine()) || !mp_guard::allowsGameTouch()) {
+        if (!(routeSRequested() || parallelEyesChangedEngine() || headTrackedMonoRequested()) ||
+            !mp_guard::allowsGameTouch()) {
             return;
         }
         std::wstring repair;
@@ -359,23 +362,10 @@ void installProfileHooks() {
         for (const ProfileCvar& c : g_cvars) {
             kept += (kept.empty() ? "" : ", ") + std::string(c.name);
         }
-        g_hooked.store(true, std::memory_order_release);
         EVR_LOG("%s: profile cvar serializer hooked at RVA 0x%X: the profile keeps the player's %s while the "
                 "layer holds them",
                 kTag, image.rva(serializer), kept.c_str());
     });
-}
-
-bool profileKeeps(std::string_view name) {
-    if (!g_hooked.load(std::memory_order_acquire)) {
-        return false;
-    }
-    for (const ProfileCvar& c : g_cvars) {
-        if (mp_policy::sameCvarName(c.name, name)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 } // namespace evr::vkcore

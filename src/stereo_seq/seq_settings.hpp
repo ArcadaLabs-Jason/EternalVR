@@ -51,6 +51,15 @@ enum class StereoTemporal : std::uint8_t {
 // per-eye TAA module writes its own set.
 const std::vector<CvarExpectation>& stereoRuntimeCvars(StereoTemporal temporal = StereoTemporal::Off);
 
+// The Off set the layer holds from the start of a session until the first stereo tick decides per-eye TAA.
+// With DLSS per eye asked for (`dlssPerEye`) it holds DLSS (r_antialiasing 2) and the asked r_dlssQuality
+// (`dlssQuality`, 0 to 3; -1 leaves the game's own) instead of r_antialiasing 0: the game then sizes its
+// render for DLSS in the menus, and the first stereo tick switches nothing. Switched there, the game made its
+// first DLSS feature at the output size (its render targets not yet at DLSS's input size) and a second one a
+// frame later, about 160 ms of the first stereo ticks on the test PC (docs/rig-findings/dlss-dll.md section
+// 10). Without DLSS: the Off set itself.
+std::vector<CvarExpectation> stereoCvarsBeforePlay(bool dlssPerEye, int dlssQuality);
+
 // r_lightScatteringTAA under Route S, the light scattering's temporal filter: on (1) while the scattering
 // history is per eye (vkcore/scatter_hooks.hpp), off (0) otherwise, since each eye would filter its fog with
 // the other eye's volume. The per-eye history needs only the eye tags, so this holds in either temporal
@@ -68,13 +77,16 @@ CvarExpectation stereoSsdoFilterCvar(bool perEyeHistory);
 // game's own settings during a session gets it off again at once: HDR output (the copy to the headset
 // expects SDR), motion blur, depth of field, chromatic aberration, vignette, view bob and the view kicks and
 // shakes (camera motion the head did not make), the damage tint and blur, the view effects' overlays, the
-// underwater screen warp, the dash's radial blur, the weapon's FOV scale and the Meathook's single view turn
-// (hand aim). In stereo the launcher puts only r_hdrDisplay on the command line (the swapchain's format is
-// picked at start-up): this hold sets the rest, so a multiplayer guard trip gives the player's values back
-// (cvar_book.hpp). Mono launches keep them on the command line. Kept in step with the launcher's
-// forced-cvars.txt, which restores the player's own values after the session, except r_waterPostProcess: in
-// mono both eyes see one picture, so it is held in stereo only. session-keys.txt restores it and
-// r_blurRadialScale (the game saves both; it writes r_blurRadialScale itself after r_motionblur 0).
+// underwater screen warp, the dash's radial blur, the weapon's FOV scale, the Meathook's single view turn
+// (hand aim) and the game's Photo mode (g_allowPhotoMode 0). In stereo the launcher puts only r_hdrDisplay on
+// the command line (the swapchain's format is picked at start-up): this hold sets the rest, so a multiplayer
+// guard trip gives the player's values back (cvar_book.hpp). Head-tracked mono holds the same set but the
+// underwater warp (monoVrHeldCvars); mono launches also keep it on the command line, where most of it never
+// took (docs/rig-findings/profile-leak.md, "Mono"). Kept in step with the launcher's forced-cvars.txt, which
+// restores the player's own values after the session, except r_waterPostProcess: in mono both eyes see one
+// picture, so it is held in stereo only, and g_allowPhotoMode, which each map load sets (nothing saves it).
+// session-keys.txt restores r_waterPostProcess and r_blurRadialScale (the game saves both; it writes
+// r_blurRadialScale itself after r_motionblur 0).
 const std::vector<CvarExpectation>& stereoComfortCvars();
 
 // swf_anchorProfile 2, the game's HUD Scale at Large (Settings, HUD; 0 Small, 1 Medium, 2 Large), held at run
@@ -90,6 +102,19 @@ CvarExpectation stereoHudScaleCvar();
 // What Route S and Parallel Eye Rendering hold for comfort and legibility (runtime_cvars.cpp,
 // runtime_cvars_pe.cpp): the comfort set and the HUD Scale.
 std::vector<CvarExpectation> stereoVrHeldCvars();
+
+// What head-tracked mono holds at run time beside its window set (vkcore/runtime_cvars.hpp): the comfort set
+// but r_waterPostProcess (one picture for both eyes, so the underwater warp stays as the game has it), at the
+// same values. The launcher's command line has the same values (forced-cvars.txt, `| mono`), but on the rig
+// (2026-11-21, Steam build 25216728) most never took: pm_noBob, the kicks and shakes, the damage tint and
+// blur, the view effects' overlays, the weapon's FOV scale, the Meathook's view turn and the vignette read
+// the game's own values from the first present to the end of the session, view_skipShakes the profile's
+// (its load comes after the command line), r_chromaticAberration was not registered yet when the command line
+// ran, and the game writes r_blurRadialScale 1 itself after r_motionblur 0; photo mode needs the hold too
+// (each map load sets g_allowPhotoMode). The profile hooks keep the player's own view_skipShakes in
+// profile.bin (vkcore/profile_hooks.hpp, installed in head-tracked mono too). The cinema screen holds none of
+// it.
+std::vector<CvarExpectation> monoVrHeldCvars();
 
 // r_SSDO under Route S (ETERNALVR_STEREO_SSDO). The game turns SSDO off itself after r_TAASafeMode 1
 // (0x1C6FCC0), which Route S holds at start-up, so without a hold every Route S session ran without it.

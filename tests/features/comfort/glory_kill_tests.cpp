@@ -41,6 +41,7 @@ TEST_CASE("glory view: a kill's sync entity counts, a pickup's animation does no
     // Names traced in headset sessions and on the rig (docs/BHAPTICS.md).
     CHECK(isKillSync("syncmelee/imp"));
     CHECK(isKillSync("syncmelee/hell_knight"));
+    CHECK(isKillSync("syncmelee/zombie_tier1")); // a chainsaw kill's on the rig (the glory kill's own name)
     CHECK(isKillSync(""));
     CHECK_FALSE(isKillSync("interact/argent_cell/use_sync"));
     CHECK_FALSE(isKillSync("interact/preator_suit_token/preator_suit_token_sync"));

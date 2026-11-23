@@ -438,10 +438,12 @@ not halved), `ETERNALVR_RENDER_SIZE=WxH`, the desktop mirror and the window set 
 window`: `+r_fullscreen 0 +r_windowWidth W +r_windowHeight H`), and nothing else of the stereo set (the game's own
 anti-aliasing, sharpening, dynamic resolution and vsync stay the player's). The layer needed one addition: with
 `ETERNALVR_MODE` not stereo and the render size wanted, the present hook holds the window set less
-`r_swapInterval` from the first present (`runtime_cvars::applyMonoWindow`, `stereo_seq::monoWindowCvars`), so a
+`r_swapInterval` from the first present (`runtime_cvars::applyMono`, `stereo_seq::monoWindowCvars`), so a
 load path that applies the player's video mode cannot take the image back to the display's size or to full
 screen (logged `cvars: head-tracked mono with the render size: only the window's mode and size are held`, then
-`held at run time: r_fullscreen 0, r_windowWidth W, r_windowHeight H`). Everything else (the client-area answer,
+`held at run time: r_fullscreen 0, r_windowWidth W, r_windowHeight H`; since head-tracked mono holds the comfort
+set too, `cvars: head-tracked mono: only the window's mode and size (the render size) and the comfort set but the
+underwater warp (16 cvars) held` and the comfort set after the window set in the list, `g_allowPhotoMode 0` last). Everything else (the client-area answer,
 present scaling, the late size, window_cap's fallback on AMD) was already mode-independent. The QA suite's
 `mono-size` scenario checks it on the simulator (1280 x 1400, one image per swapchain, the hold's lines) through the
 harness's own launch: it sets `ETERNALVR_MODE=mono` itself (the launcher leaves it unset in Mono, the layer's

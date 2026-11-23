@@ -21,8 +21,9 @@ namespace evr::comfort {
 
 enum class GloryView { Follow, Steady, Fade, Screen };
 
-// Whether a sync entity's entityDef name is a kill's (`syncmelee/<demon>`, the chainsaw's [inferred]) rather
-// than a pickup's animation (`interact/...`: a Sentinel Crystal, a Praetor token, a rune, a mod bot). Every
+// Whether a sync entity's entityDef name is a kill's (`syncmelee/<demon>`, a chainsaw kill's too: a sawn
+// zombie's is `syncmelee/zombie_tier1` on the rig, docs/rig-findings/camera-takeovers.md row 3) rather than a
+// pickup's animation (`interact/...`: a Sentinel Crystal, a Praetor token, a rune, a mod bot). Every
 // `interact/...` sync counts as a pickup, also one that picks nothing up (the automap station's). An
 // unreadable (empty) name counts as a kill.
 bool isKillSync(std::string_view entityDefName);

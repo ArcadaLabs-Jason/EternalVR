@@ -180,7 +180,7 @@ search order turned out to be, in this section.
 
 ### Results (2026-09-30, the Windows rig: RTX 4080, driver 616.92, Steam build 25216728, OpenXR simulator)
 
-Dev main 19f4e9d, Route S, e1m2_battle, `ETERNALVR_STEREO_DLSS=1`, `ETERNALVR_STEREO_DLSS_QUALITY=quality`,
+Main 19f4e9d, Route S, e1m2_battle, `ETERNALVR_STEREO_DLSS=1`, `ETERNALVR_STEREO_DLSS_QUALITY=quality`,
 `+r_antialiasing 2`, the DLL of section 2 (310.9.1.0) in `tmp-vr\dlss\310.9.1\`. Every run clean.
 
 | Step | Result |
@@ -248,3 +248,67 @@ whose DLSS input fits the 2064 x 2208 budget, never above the runtime's recommen
 side (Quality 2/3, Balanced 0.58, Performance 1/2, Ultra Performance 1/3; `render_size::kDlssInputShare`, the launcher's
 `DlssDll.QualityFactors`). DLAA counts as the full size, so Auto keeps the TAA size with it; DLAA without a newer DLL runs
 at Quality (above) at that size, as before. What the larger output costs is in render-size.md section 5.
+
+## 10. The first DLSS frame's feature at the output size
+
+Every DLSS run with a quality below DLAA logged, at the start of play, a DLSS feature at the output size
+(`seq-taa: eye R's DLSS feature for the game's feature 1: created (2, ...; 2048x2208 -> 2048x2208, PerfQualityValue 2,
+...)`) before the one at DLSS's input size (feature 3, `1365x1472 -> 2048x2208`); DLAA made one only.
+
+**What makes it** [static-verified, build 25216728]. The game's DLSS pass (0x1C9B5D0, run from 0x1C9B560 when the
+DLSS-on flag 0x667EC53 is set) calls the feature create (0x1CC5760) every frame with the frame's render target size and
+the output size. 0x1CC5760 keeps the quality, the sizes and the sharpening flag it made its feature with (render system
++0x198 to +0x1AC): any of them different, it releases the feature (`NVSDK_NGX_VULKAN_ReleaseFeature`, 0x1CC5841) and
+makes a new one. The DLSS-on flag and the render size are set together by 0x1CBFA60 (`r_antialiasing` 2, NGX's optimal
+size for `r_dlssQuality`), which a frame runs at its start when a cvar change asked for it (0x1CDB040); that frame's
+render targets are still at the old size, the next frame's at the new one. Under Route S the stereo set held
+`r_antialiasing 0` until the first stereo tick, where per-eye TAA wrote `r_antialiasing 0 -> 2` and
+`r_dlssQuality 2 -> 3`: the first DLSS frame rendered at the output size (TAA's), so the game made its feature
+there, then released it and made the real one a frame later. The game's own path, after a switch to DLSS; the
+layer's switch at the first stereo tick brought it to every session. DLAA's input is the output size, so its first
+feature was already the right one.
+
+**Does it stay** [rig, log]. No: `seq-taa: the game released its DLSS feature 1, and eye R's feature 2 with it` about
+0.14 s after it was made, before feature 3 (run d1; the line is new, `taa_ngx.cpp`). So no video memory is held for it
+and no GPU work per frame after that.
+
+**What it cost** [rig, log]: the first stereo ticks' CPU and GPU times (`ETERNALVR_GPU_TIMING=1`, the release build,
+DLSS Quality at 2048 x 2208, 310.9.1 preset K, the `baseline` scenario):
+
+| Run | DLSS features made | First four stereo renders, CPU / GPU ms (eye L, R, L, R) |
+|---|---|---|
+| d3, as before | 4 (1 and 2 at 2048 x 2208, released; 3 and 4 at 1365 x 1472) | 72/76, 54/52, **128/131, 47/43** |
+| d4, `r_antialiasing 2` and `r_dlssQuality 3` held from the start (`ETERNALVR_DEBUG_CVARS`) | 2 (at 1365 x 1472) | 74/77, 52/51, 6/8, 7/4 |
+
+The bench runs of the dlss-auto work show the same second tick at every size and route (98 to 128 ms for eye L, 44 to
+52 for eye R; DLAA's 4 to 8). So the switch at the first stereo tick cost about 160 ms of the first second of play,
+once a session, on top of the first tick's own (both runs about 125 ms: the first feature and eye R's twin).
+
+**The fix**: with DLSS per eye the stereo set held until the first stereo tick is `r_antialiasing 2` and the launcher's
+`r_dlssQuality` (`stereo_seq::stereoCvarsBeforePlay`, `runtime_cvars.cpp`), so the game sizes its render for DLSS
+in the menus (`seq-taa: resize to 1365x1472 (upscaled 2048x2208)` before the map loads) and the first stereo tick
+switches nothing; once per-eye TAA failed closed that hold stops and its `r_antialiasing 0` stands. TAA and Off keep
+`r_antialiasing 0` there as before, and Parallel Eye Rendering holds its own set (`r_antialiasing 2` from the start, VR_STEREO.md). The launcher already
+puts `+r_antialiasing 2` on the command line with DLSS, so the hold no longer turns it off for the menus.
+A card without DLSS (only by setting `ETERNALVR_STEREO_DLSS=1` by hand: the launcher offers DLSS on RTX only) now has
+`r_antialiasing 2` in the menus too, as it had in play before: the game turns DLSS on only while its own flag 0x667EC52
+says DLSS is available (set after its NGX Init from `SuperSampling.Available`, 0x1CC4C2F; read by 0x1CBFA60), so there
+it runs its TAA pass (0x1C9B900) under the held `r_TAASafeMode 1`; that flag is not known when the hold starts (the
+game's NGX Init ran 2 s to 21 s into the rig's sessions, the hold about 9.7 s), so the hold does not wait for it
+[static; no card without DLSS on the rig].
+
+With the fix [rig, log; the same set-up as d3 and d4]:
+
+| Run | What the log shows | First four stereo renders, CPU / GPU ms |
+|---|---|---|
+| d5, DLSS Quality | `cvars: held at run time: r_TAASafeMode 1, r_antialiasing 2, r_dlssQuality 3, ...`, `r_antialiasing 1 -> 2 ... held in VR` at 9.7 s, `seq-taa: resize to 1365x1472 (upscaled 2048x2208)` in the menu; 2 features, eye R's `1365x1472 -> 2048x2208` | 75/80, 53/50, 5/5, 7/4 |
+| d6, DLAA | the same hold with `r_dlssQuality 3`; 2 features, both `, DLAA` | 74/76, 54/52, 6/7, 6/6 |
+| t1, TAA | unchanged: `r_antialiasing 0` held, `seq-taa: r_antialiasing 0 -> 1` at the first stereo tick, no DLSS feature | |
+
+The QA suite's DLSS scenarios (`foveation-eyes-dlss`, `foveation-eyes-reload`, `depth-layer-dlss`) pass with the fix,
+with NVIDIA's newest DLL and with the game's own, two features each (none made again after the reload).
+
+Video memory in play (the `vram:` line every 10 s): 9141 and 9143 MB as before (d1, d3), 9105 to 9137 MB with DLSS held
+from the start (d2, d4, d5): no difference beyond the runs' own spread, as the release says. In the menus before the
+map, about 250 MB less with the hold (5386 against 5636 MB at the first reading: the game's targets at DLSS's input
+size there).

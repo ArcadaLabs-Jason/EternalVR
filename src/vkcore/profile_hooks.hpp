@@ -46,19 +46,15 @@
 
 namespace evr::vkcore {
 
-// From vkCreateInstance with Route S or Parallel Eye Rendering, after the multiplayer guard, before the game
-// loads the profile. Locates the serializer (its signature once in .text, view_skipShakes' archive check
-// inside it) and hooks it; logs and does nothing when a check fails.
+// From vkCreateInstance with Route S, Parallel Eye Rendering or head-tracked mono (whose comfort set holds
+// view_skipShakes too), after the multiplayer guard, before the game loads the profile. Locates the
+// serializer (its signature once in .text, view_skipShakes' archive check inside it) and hooks it; logs and
+// does nothing when a check fails.
 void installProfileHooks();
 
 // Under runtime_cvars::heldMutex: the player chose `value` for the profile-stored cvar `name` in the game's
 // menu while the layer held it (runtime_cvars.hpp, playerChose): the saves write it from now on, and a
 // multiplayer guard trip gives it back.
 void profilePlayerChoice(std::string_view name, const std::string& value);
-
-// Any thread: the hooks are in and keep the player's own value of `name` in profile.bin. An optional cvar
-// (mp_policy::profileOptionalCvar, photo mode) is held at run time only then (runtime_cvars.cpp): a build
-// without it, or without the hooks, leaves it as the player has it.
-bool profileKeeps(std::string_view name);
 
 } // namespace evr::vkcore

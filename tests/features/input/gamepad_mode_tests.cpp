@@ -1,10 +1,14 @@
 #include "features/input/gamepad_mode.hpp"
 
+#include "features/input/controller_settings.hpp"
 #include "features/input/forced_angles.hpp"
 
 #include <doctest/doctest.h>
 
 #include <cstdint>
+#include <optional>
+#include <string>
+#include <string_view>
 
 using evr::input::ForcedAngleGate;
 using evr::input::ForcedAngleSignals;
@@ -87,4 +91,31 @@ TEST_CASE("gamepad mode: the pad's weapon wheel yields the aim only, a pickup's 
     ForcedAngleGate controllers;
     CHECK(frame(controllers, false, kWheel));
     CHECK(controllers.reason() == ForcedReason::Inhibit);
+}
+
+TEST_CASE("gamepad mode leaves the game's own button prompts: no keyboard prompts held") {
+    // ETERNALVR_CONTROLLERS and ETERNALVR_BUTTON_PROMPTS as the launcher passes them (unset: on).
+    const auto held = [](const std::optional<std::string>& controllers,
+                         const std::optional<std::string>& prompts) {
+        const auto parsed =
+            evr::input::parseControllerSettings([&](std::string_view name) -> std::optional<std::string> {
+                if (name == "ETERNALVR_CONTROLLERS") {
+                    return controllers;
+                }
+                if (name == "ETERNALVR_BUTTON_PROMPTS") {
+                    return prompts;
+                }
+                return std::nullopt;
+            });
+        return evr::input::holdsKeyboardPrompts(parsed.settings);
+    };
+    // The motion controllers: the keyboard prompts the prompt hooks rename to the VR buttons.
+    CHECK(held(std::nullopt, std::nullopt));
+    CHECK(held(std::string("1"), std::string("1")));
+    // Gamepad mode: no prompt is renamed, so the pad's own prompts ("[SPACE] TO DISMISS" was shown to a pad
+    // player whose B closes the popup).
+    CHECK_FALSE(held(std::string("0"), std::nullopt));
+    CHECK_FALSE(held(std::string("off"), std::string("1")));
+    // The button prompts off: the game's prompts as before.
+    CHECK_FALSE(held(std::string("1"), std::string("0")));
 }

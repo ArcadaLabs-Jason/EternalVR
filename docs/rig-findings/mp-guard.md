@@ -278,8 +278,9 @@ anti-cheat tripwire's negative test.
   `hands_fovScale`, `meatHook_playerViewOverrideMode` and the post effects are no longer on a stereo launch's
   command line: the layer's hold (`stereoComfortCvars`) is the only writer, from Route S's first present, so
   the cvar book keeps the player's values and a trip gives them back. Still open: the launcher's remaining
-  command-line cvars after a trip (`r_hdrDisplay`, the stereo set, and the comfort set in mono, where the layer
-  holds nothing) keep their VR values unless the
+  command-line cvars after a trip (`r_hdrDisplay`, the stereo set, and the comfort set in mono, which
+  head-tracked mono's layer now holds too, so only the ones that took from the command line: `r_motionblur`,
+  `r_dof` on the rig) keep their VR values unless the
   layer had to write them. Setting them back needs each one's flat value, and none of the sources is good
   enough yet: the registration's default (the `lea r8` of each cvar's registration, read by
   `analysis/ui-layer/cvars.py`) disagrees with the 2024 cvar dump (`reference/idtech7/typeinfo/

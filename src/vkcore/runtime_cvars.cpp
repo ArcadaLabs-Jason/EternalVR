@@ -5,12 +5,12 @@
 #include "stereo_seq/debug_cvars.hpp"
 #include "stereo_seq/seq_settings.hpp"
 #include "stereo_seq/setting_follow.hpp"
+#include "vkcore/controllers_impl.hpp"
 #include "vkcore/cvar_book.hpp"
 #include "vkcore/game_text.hpp"
 #include "vkcore/log.hpp"
 #include "vkcore/mp_guard.hpp"
 #include "vkcore/pe_flares.hpp"
-#include "vkcore/profile_hooks.hpp"
 #include "vkcore/scatter_hooks.hpp"
 #include "vkcore/ssdo_hooks.hpp"
 #include "vkcore/ssdo_menu_hook.hpp"
@@ -52,7 +52,8 @@ std::mutex g_mutex;
 bool g_started = false;
 SetStringFn g_setString = nullptr;
 std::vector<Held> g_held;
-bool g_monoWindow = false; // applyMonoWindow() before the first apply: the mono window set only
+bool g_mono = false; // applyMono() before the first apply: the mono set only (addMonoSet)
+bool g_monoHeadTracked = false;
 int g_loggedWrites = 0;
 std::atomic<std::uint64_t> g_writes{0};
 int g_profileIo = 0; // profile loads and saves under way (setProfileIo), under g_mutex
@@ -129,17 +130,6 @@ void reportFollows() {
     }
     ssrReported = ssr;
     ssdoReported = ssdo;
-}
-
-// The cvar's float value (the values block, +0x0C; the renderer reads it there, e.g. 0x1CFC7C3).
-float readFloat(const std::byte* object) {
-    const std::byte* values = nullptr;
-    std::memcpy(&values, object, sizeof(values));
-    float number = 0.0f;
-    if (values) {
-        std::memcpy(&number, values + 0x0C, sizeof(number));
-    }
-    return number;
 }
 
 // A held entry; a "<=N" value becomes a cap. False for a cap whose number does not parse.
@@ -231,10 +221,11 @@ void addDebugList() {
 }
 
 // The game's prompts stay in their keyboard form, which prompt_hooks.cpp renames to the VR buttons: a gamepad
-// or Steam Input would switch them to pad glyphs naming the pad's binds. ETERNALVR_BUTTON_PROMPTS=0 leaves
-// the cvar as the game has it, and an ETERNALVR_DEBUG_CVARS entry for it wins.
+// or Steam Input would switch them to pad glyphs naming the pad's binds. ETERNALVR_BUTTON_PROMPTS=0 and
+// gamepad mode leave the cvar as the game has it (input::holdsKeyboardPrompts); an ETERNALVR_DEBUG_CVARS
+// entry wins.
 void addPromptPlatform() {
-    if (narrowEnv(L"ETERNALVR_BUTTON_PROMPTS") == "0" || heldNamed("swf_platformOverride")) {
+    if (!input::holdsKeyboardPrompts(controllers::settings()) || heldNamed("swf_platformOverride")) {
         return;
     }
     Held h;
@@ -260,8 +251,10 @@ std::string commandLine() {
 void collect(bool stereo) {
     std::wstring off;
     if (stereo && !(readEnv(L"ETERNALVR_STEREO_RUNTIME_CVARS", off) && off == L"0")) {
-        for (const auto& c : stereo_seq::stereoRuntimeCvars(stereo_seq::StereoTemporal::Off)) {
+        const bool dlss = taaRequested() && taaDlssRequested();
+        for (const auto& c : stereo_seq::stereoCvarsBeforePlay(dlss, taaDlssQuality())) {
             g_held.push_back(Held{std::string(c.name), std::string(c.value), true, true});
+            g_held.back().dlssBeforePlay = dlss; // per-eye TAA failed closed: its v1 set's r_antialiasing 0
         }
         const stereo_seq::CvarExpectation scatter = stereo_seq::stereoScatterFilterCvar(false);
         g_held.push_back(Held{std::string(scatter.name), std::string(scatter.value), true, false});
@@ -297,21 +290,12 @@ void collect(bool stereo) {
 }
 
 void start(bool stereo) {
-    if (g_monoWindow) {
-        EVR_LOG("%s: head-tracked mono with the render size: only the window's mode and size are held", kTag);
-        addWindowSet(g_held, true);
+    if (g_mono) {
+        addMonoSet(g_held, g_monoHeadTracked);
+        addDebugList();
     } else {
         collect(stereo);
     }
-    // An optional profile cvar (photo mode) only while the profile hooks keep the player's value: held
-    // without them, its VR value would be saved into the flat game's profile.
-    std::erase_if(g_held, [](const Held& h) {
-        if (!mp_policy::profileOptionalCvar(h.name) || profileKeeps(h.name)) {
-            return false;
-        }
-        EVR_LOG("%s: %s not held: the profile hooks do not keep it in this session", kTag, h.name.c_str());
-        return true;
-    });
     GameImage image;
     if (g_held.empty() || !locateGameImage(image, kTag)) {
         return;
@@ -405,6 +389,17 @@ int readValue(const std::byte* object) {
     return number;
 }
 
+// The renderer reads the float there (+0x0C), e.g. 0x1CFC7C3.
+float readFloat(const std::byte* object) {
+    const std::byte* values = nullptr;
+    std::memcpy(&values, object, sizeof(values));
+    float number = 0.0f;
+    if (values) {
+        std::memcpy(&number, values + 0x0C, sizeof(number));
+    }
+    return number;
+}
+
 bool applied() {
     return g_started;
 }
@@ -464,7 +459,7 @@ void apply(bool stereo) {
     }
     for (Held& h : g_held) {
         if (!h.object || (h.temporal && g_temporal != stereo_seq::StereoTemporal::Off) ||
-            ((h.scatter || h.ssdo) && !historyFilterHold(h)) ||
+            (h.dlssBeforePlay && taaFailedClosed()) || ((h.scatter || h.ssdo) && !historyFilterHold(h)) ||
             (h.viewDlss && !viewDlssHolds(h.name, h.value)) || (h.flares && parallelEyeFlaresLive()) ||
             (h.profile && g_profileIo > 0)) {
             continue;
@@ -494,10 +489,7 @@ void apply(bool stereo) {
         }
         const int before = readValue(h.object);
         if (h.value == "?") {
-            if (!h.logged) {
-                h.logged = true;
-                EVR_LOG("%s: %s reads %d", kTag, h.name.c_str(), before);
-            }
+            logQuery(h, before);
             continue;
         }
         if (h.cap) {
@@ -555,11 +547,12 @@ void apply(bool stereo) {
     }
 }
 
-void applyMonoWindow() {
+void applyMono(bool headTracked) {
     {
         std::lock_guard lock(g_mutex);
         if (!g_started) {
-            g_monoWindow = true;
+            g_mono = true;
+            g_monoHeadTracked = headTracked;
         }
     }
     apply(false);

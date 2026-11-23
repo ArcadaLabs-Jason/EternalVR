@@ -9,13 +9,15 @@ namespace EternalVR.Launcher.Core.Tests
     /// <summary>
     /// The comfort set (view bob, kicks, shakes, the damage tint and blur and the rest): in stereo the layer holds it at run time
     /// (stereo_seq::stereoComfortCvars), so it is not on the command line and a multiplayer guard trip gives the player's values back;
-    /// in mono the layer holds none, so the command line keeps it. HDR output stays on the command line in both.
+    /// in mono the command line keeps it as well, though most of it never took there, so head-tracked mono's layer holds it at run
+    /// time too (stereo_seq::monoVrHeldCvars, kept in step with the mono lines by profile_cvars_tests.cpp). HDR output stays on the
+    /// command line in both.
     /// </summary>
     public class ComfortCvarsTests
     {
         /// <summary>stereo_seq::stereoComfortCvars without r_hdrDisplay, r_waterPostProcess (held in stereo only, never on the
-        /// command line; session-keys.txt restores it) and g_setting_photomode (held in stereo only: on the command line the game's
-        /// profile would set it again; the layer's profile hooks keep the player's value in profile.bin).</summary>
+        /// command line; session-keys.txt restores it) and g_allowPhotoMode (photo mode kept off, held by the layer in stereo and in mono:
+        /// each map load sets it, so a command line value would not hold).</summary>
         private static readonly string[] ComfortSet =
         {
             "r_motionblur", "r_blurRadialScale", "r_dof", "r_chromaticAberration", "r_vignette", "pm_noBob", "view_skipKicks", "view_skipShakes", "hands_fovScale",
@@ -44,10 +46,15 @@ namespace EternalVR.Launcher.Core.Tests
         [Fact]
         public void PhotoModeIsNeverOnTheCommandLine()
         {
-            // The game's profile load sets it after the command line, and the restore covers no profile.bin key.
+            // The player's own setting is never forced (the game's profile load sets it after the command line, and the
+            // restore covers no profile.bin key); g_allowPhotoMode, which keeps photo mode off, is the layer's alone (each map
+            // load sets it).
             foreach (var mode in new[] { VrMode.Stereo, VrMode.Mono })
+            {
                 Assert.DoesNotContain("g_setting_photomode", CommandLine(mode));
-            Assert.DoesNotContain(Shipped.All, c => c.Name == "g_setting_photomode");
+                Assert.DoesNotContain("g_allowPhotoMode", CommandLine(mode));
+            }
+            Assert.DoesNotContain(Shipped.All, c => c.Name == "g_setting_photomode" || c.Name == "g_allowPhotoMode");
         }
 
         [Fact]

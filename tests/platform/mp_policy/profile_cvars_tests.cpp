@@ -1,11 +1,17 @@
 #include "platform/mp_policy/profile_cvars.hpp"
 #include "platform/mp_policy/saved_cvars.hpp"
 #include "stereo_seq/seq_settings.hpp"
+#include "ui_layer/crosshair.hpp"
+#include "vkcore/parallel_eyes_settings.hpp"
 
 #include <doctest/doctest.h>
 
+#include <cstddef>
+#include <fstream>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 using evr::mp_policy::profileLoadSeed;
 using evr::mp_policy::profileStoredCvar;
@@ -63,26 +69,148 @@ struct Sim {
 } // namespace
 
 TEST_CASE(
-    "profile cvars: view_skipShakes, r_sharpening, the HUD scale and photo mode, not the cvars the load sets "
-    "again") {
+    "profile cvars: view_skipShakes, r_sharpening and the HUD scale, not the cvars the load sets again") {
     CHECK(profileStoredCvar("view_skipShakes"));
     CHECK(profileStoredCvar("VIEW_SKIPSHAKES"));
     CHECK(profileStoredCvar("r_sharpening"));
     CHECK(profileStoredCvar("swf_anchorProfile"));
-    CHECK(profileStoredCvar("g_setting_photomode"));
-    // Photo mode is optional: a build without it keeps the hooks for the others; those three are not.
-    CHECK(evr::mp_policy::profileOptionalCvar("g_setting_photomode"));
-    CHECK(evr::mp_policy::profileOptionalCvar("G_SETTING_PHOTOMODE"));
-    for (const char* required : {"view_skipShakes", "r_sharpening", "swf_anchorProfile"}) {
-        CHECK_FALSE(evr::mp_policy::profileOptionalCvar(required));
-    }
-    for (const auto name : evr::mp_policy::profileStoredCvars()) {
-        CHECK(profileStoredCvar(name)); // every optional one is also profile-stored
-    }
+    CHECK(evr::mp_policy::profileStoredCvars().size() == 3);
+    // Photo mode is no longer held through its setting, so the hooks have nothing to keep for it.
+    CHECK_FALSE(profileStoredCvar("g_setting_photomode"));
+    CHECK_FALSE(profileStoredCvar("g_allowPhotoMode"));
     CHECK_FALSE(profileStoredCvar("r_antialiasing"));
     CHECK_FALSE(profileStoredCvar("r_raytracedReflectionsTemporalUpscaleQuality"));
     CHECK_FALSE(profileStoredCvar("view_skipKicks")); // not in the profile
     CHECK_FALSE(profileStoredCvar("view_skipShake"));
+}
+
+namespace {
+
+// The first `|` field of each line of a launcher data file (forced-cvars.txt, cpu-saver.txt) that names a
+// cvar: comments, blank lines and the CPU Saver's item and tip lines left out.
+std::vector<std::string> dataFileCvars(const char* path) {
+    std::vector<std::string> names;
+    std::ifstream in(path);
+    std::string line;
+    while (std::getline(in, line)) {
+        const std::size_t bar = line.find('|');
+        if (line.empty() || line[0] == '#' || bar == std::string::npos) {
+            continue;
+        }
+        std::string name = line.substr(0, bar);
+        while (!name.empty() && (name.back() == ' ' || name.back() == '	')) {
+            name.pop_back();
+        }
+        if (name != "item" && name != "tip" && !name.empty()) {
+            names.push_back(name);
+        }
+    }
+    return names;
+}
+
+} // namespace
+
+TEST_CASE(
+    "profile cvars: the game settings fields' cvars, none of them in a set the layer or launcher holds") {
+    // The game copies these into the profile's GAME_FIELD_* fields before each save and back after each load,
+    // outside the profile hooks: a held value there reached the flat game (photo mode, 0.1.99 to 0.1.101).
+    using evr::mp_policy::profileFieldCvar;
+    CHECK(evr::mp_policy::profileFieldCvars().size() == 16);
+    CHECK(profileFieldCvar("g_setting_photomode"));
+    CHECK(profileFieldCvar("G_SETTING_PHOTOMODE"));
+    CHECK(profileFieldCvar("g_reticleMode"));
+    CHECK(profileFieldCvar("g_settings_dashStyle"));
+    CHECK_FALSE(profileFieldCvar("g_allowPhotoMode")); // nothing saves it
+    for (const auto name : evr::mp_policy::profileFieldCvars()) {
+        CHECK_FALSE(profileStoredCvar(name)); // the hooks' cvars are not among them
+    }
+    // Every held set a test can reach as data. Route S: its sets before play (TAA, DLSS at each quality), the
+    // per-eye filters, SSDO, SSR, the window and present set, the comfort set and the HUD Scale; mono's set
+    // and window set; the v1 sequential set; Parallel Eye Rendering's anti-aliasing (each mode); hand aim's
+    // reticle hold; the profile hooks' own cvars (r_sharpening is the launcher's Sharpening); the launcher's
+    // command line (forced-cvars.txt) and the CPU Saver's items (cpu-saver.txt).
+    std::vector<std::string> held;
+    const auto add = [&held](const auto& set) {
+        for (const auto& c : set) {
+            held.emplace_back(c.name);
+        }
+    };
+    namespace seq = evr::stereo_seq;
+    add(seq::stereoVrHeldCvars());
+    add(seq::monoVrHeldCvars());
+    add(seq::sequentialCvars());
+    add(seq::stereoRuntimeCvars(seq::StereoTemporal::Off));
+    add(seq::stereoRuntimeCvars(seq::StereoTemporal::PerEye));
+    for (const int quality : {-1, 0, 1, 2, 3}) {
+        add(seq::stereoCvarsBeforePlay(true, quality));
+        for (const bool dlss : {false, true}) {
+            add(evr::vkcore::parallel_eyes::antiAliasingCvars(false, dlss, quality));
+            add(evr::vkcore::parallel_eyes::antiAliasingCvars(true, dlss, quality));
+        }
+    }
+    add(seq::stereoCvarsBeforePlay(false, -1));
+    for (const bool perEye : {false, true}) {
+        add(std::vector<seq::CvarExpectation>{seq::stereoScatterFilterCvar(perEye),
+                                              seq::stereoSsdoFilterCvar(perEye)});
+    }
+    add(std::vector<seq::CvarExpectation>{*seq::stereoSsdoCvar(""), *seq::stereoSsrCvar(""),
+                                          seq::stereoHudScaleCvar()});
+    add(seq::stereoWindowCvars("game.exe +r_windowWidth 1 +r_windowHeight 1"));
+    add(seq::monoWindowCvars("game.exe +r_windowWidth 1 +r_windowHeight 1"));
+    held.emplace_back(evr::ui_layer::kReticleStyleCvar);
+    for (const auto name : evr::mp_policy::profileStoredCvars()) {
+        held.emplace_back(name);
+    }
+    const std::vector<std::string> forced = dataFileCvars(EVR_FORCED_CVARS_FILE);
+    const std::vector<std::string> saver = dataFileCvars(EVR_CPU_SAVER_FILE);
+    REQUIRE(forced.size() > 20);
+    REQUIRE(saver.size() > 5);
+    held.insert(held.end(), forced.begin(), forced.end());
+    held.insert(held.end(), saver.begin(), saver.end());
+    for (const std::string& name : held) {
+        INFO(name);
+        CHECK_FALSE(profileFieldCvar(name));
+    }
+}
+
+TEST_CASE("profile cvars: every comfort cvar mono's command line forces is held in head-tracked mono") {
+    // The command line alone did not hold them (on the rig most never took): each `| mono` line of
+    // forced-cvars.txt is held at run time at the same value, so the two lists stay in step.
+    std::ifstream in(EVR_FORCED_CVARS_FILE);
+    std::string line;
+    int mono = 0;
+    const auto trim = [](std::string text) {
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
+            text.erase(text.begin());
+        }
+        while (!text.empty() && (text.back() == ' ' || text.back() == '\t' || text.back() == '\r')) {
+            text.pop_back();
+        }
+        return text;
+    };
+    while (std::getline(in, line)) {
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+        std::vector<std::string> fields;
+        std::size_t start = 0;
+        for (std::size_t bar = line.find('|'); bar != std::string::npos; bar = line.find('|', start)) {
+            fields.push_back(trim(line.substr(start, bar - start)));
+            start = bar + 1;
+        }
+        fields.push_back(trim(line.substr(start)));
+        if (fields.size() < 3 || fields[2] != "mono") {
+            continue;
+        }
+        ++mono;
+        INFO(fields[0]);
+        bool held = false;
+        for (const auto& c : evr::stereo_seq::monoVrHeldCvars()) {
+            held = held || (c.name == fields[0] && sameCvarValue(c.value, fields[1]));
+        }
+        CHECK(held);
+    }
+    CHECK(mono >= 14);
 }
 
 TEST_CASE("profile cvars: values compare as numbers, else as text") {

@@ -61,7 +61,7 @@ fixed or listed in `docs/release/KNOWN-ISSUES.md` before the beta.
 
 ### Part 1 measurements
 
-0.1.56 (dev main 8cb43340), Steam version, render 2048 x 2208 per eye (band 2048 x 1152), launcher defaults,
+0.1.56 (main 8cb43340), Steam version, render 2048 x 2208 per eye (band 2048 x 1152), launcher defaults,
 subtitles on, the first mission's opening; cap heights from the GUI captures (pixels whose brightest channel is
 over 150 of 255, so a glyph's glow may add a pixel):
 
@@ -79,7 +79,7 @@ over 150 of 255, so a glyph's glow may add a pixel):
 | Equipment button labels (above the equipment slots) | "Left Grip", "Right Stick", "Left Trigger" | 22 px | 0.82 deg | **fail**: the names are longer than their boxes and overlap ("Left Grip ght St... ft Tr...") |
 | Pop-ups, tutorial prompts, subtitles in play | not captured yet | | | to do |
 
-0.1.75 (dev main 6a2e235b), the same settings, mission three at the checkpoint before the gate (the challenges panel
+0.1.75 (main 6a2e235b), the same settings, mission three at the checkpoint before the gate (the challenges panel
 and the demonic corruption bar on screen), once at the game's default HUD scale and once with its HUD scale held at
 Large (`swf_anchorProfile` 2), plus the first mission's opening on a new profile. Same measure:
 
@@ -97,7 +97,7 @@ At the default HUD scale four of the game's small texts are under the bar (0.37 
 them gains two or three pixels, the names and the labels pass, and the hint and the corruption title fall short by
 less than a pixel (0.49 deg). Part 2 decides whether 0.5 deg is the right bar (T-077).
 
-0.1.77 (dev main f07c9ef8), the same settings with the HUD Scale held at Large (the VR default since 0.1.77), on a new
+0.1.77 (main f07c9ef8), the same settings with the HUD Scale held at Large (the VR default since 0.1.77), on a new
 profile (no tutorial seen): the Slayer Tutorial pop-up on the game's tutorial map (`+devmap
 game/tutorials/tutorial_sp`, the first pop-up of a new profile), the first mission's loading screen and the death
 screen, and the prompts in the tutorial map's first room. Same measure (white text: pixels whose darkest channel is

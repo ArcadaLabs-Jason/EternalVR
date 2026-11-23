@@ -344,11 +344,17 @@ default) gets what a stereo launch gets for one eye:
   +r_windowHeight H`), and nothing else of the stereo set: the game's own anti-aliasing (its video menu's TAA or
   DLSS), sharpening, dynamic resolution and vsync stay as the player has them;
 - the layer answers the game's client area with that size as in stereo (docs/rig-findings/render-size.md), and
-  from the first present holds the window's mode and size (`runtime_cvars::applyMonoWindow`,
+  from the first present holds the window's mode and size (`runtime_cvars::applyMono`,
   `stereo_seq::monoWindowCvars`: `r_fullscreen 0`, `r_windowWidth` / `r_windowHeight` from the command line;
   not `r_swapInterval`), so a load path that applies the player's video mode cannot take the image back to the
-  display's size or to full screen. It holds nothing else in mono; a multiplayer guard trip leaves the window
-  set as in stereo. The launcher's session restore puts the player's window keys back after the session.
+  display's size or to full screen. Beside it, with the render size on or off, it holds the comfort set but
+  the underwater warp (`stereo_seq::monoVrHeldCvars`: no camera shake, view bob, damage tint and blur, motion
+  blur and the rest, and the game's Photo mode off through `g_allowPhotoMode 0`, which leaves the player's own
+  Photo mode setting alone; docs/VR_STEREO.md "Cvars"), as stereo does: on the rig most of it never took from
+  the launcher's command line (docs/rig-findings/profile-leak.md, "Mono"). The profile hooks keep the player's
+  own camera shake setting in `profile.bin`. A multiplayer guard trip leaves the window set as in stereo and gives
+  the rest the values the game had. The launcher's session restore puts the player's window keys and the comfort
+  set's config keys back after the session.
 
 The size: VDXR's 2496 x 2688 (and anything above the budget, Godlike's 3072 x 3264 too) gives 2056 x 2216 or
 2072 x 2200, the size of one stereo eye, so a mono frame renders about half of a stereo tick's pixels. The one

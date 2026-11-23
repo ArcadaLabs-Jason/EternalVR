@@ -299,7 +299,7 @@ the first frame after a hitch is the hand where the runtime predicted it for the
 pose exists then); the next view has the new one.
 
 On the rig (docs/rig-findings/hands-rig.md, section 14) scripted hitches of 150 and 400 ms with the Chaingun
-and the Heavy Cannon held handed both arms back in 12 of 12 on dev main and in none now, the weapon arm at
+and the Heavy Cannon held handed both arms back in 12 of 12 on main and in none now, the weapon arm at
 weight 1 and the off hand's written wrist on its target through all of them. Posing through a hitch also
 needed the arms' clean read to count ticks (a read counts as clean only 150 ms and 3 ticks after the last
 write, on both arms; "The whole arm" below): with the time alone, the off hand's glove on the Heavy Cannon
@@ -713,7 +713,7 @@ shooting, turret, bring-up and switch animations all keep it there; its zoom and
 gun's pistol grip in exactly the Heavy Cannon's idle grip (wrist and fingers to 3e-6). No ballista animation
 holds anything else (its shots move the hand 10 to 20 cm), and its mesh kit (`HideAll`) draws no arm in flat
 play. Placed at a controller by the hand-grip rows (the gun's pistol-grip point in the hand), that glove sat 72
-and 48 cm from the real hand (rig `hg-grip3`, dev main) and, put in the hand, it would be turned across the
+and 48 cm from the real hand (rig `hg-grip3`, main) and, put in the hand, it would be turned across the
 controller's grip.
 
 **What the layer does** (`features/arm/grip_hand.hpp`, `vkcore/weapon_arm.cpp`; the weapons by data:
@@ -790,7 +790,7 @@ The forearm, elbow and upper arm reach the wrist by the same IK as on every gun.
   end S mm off the glove, the shoulder end H mm off; the gun's root moved G mm at the grip (R mm at the root,
   turned T deg) from the read the write was placed under`.
 - **Rig** (OpenXR-Simulator, the grip sweep, five holds and a view hold per gun; docs/rig-findings/hands-rig.md,
-  section 11): the glove's wrist from its target, median / largest, chaingun 72.3 / 72.5 cm before (dev main)
+  section 11): the glove's wrist from its target, median / largest, chaingun 72.3 / 72.5 cm before (main)
   and 0.1 / 0.3 after, ballista 48.0 / 48.2 and 0.2 / 0.5, the other six unchanged (0.1 to 0.2 / 0.2 to 0.3);
   the sights check passes (largest 0.20 degrees on both); the merge-QA hands check (combat shotgun) has no
   regression against its baseline. The captures show the forearm going into the chaingun's grip from below
@@ -1086,7 +1086,7 @@ arms and the Heavy Cannon's grip).
   moves with the gun in the shots too. Captures show the left glove's fist closed on the combat shotgun's
   pistol grip and the right glove free in the right hand, and with the default off hand the right glove on the
   shotgun's fore-end. Right-handed play is unchanged: the grip sweep within 0.1 cm and the sights within 0.01
-  degree of dev main's, the merge-QA hands check 0 regressions.
+  degree of main's, the merge-QA hands check 0 regressions.
 - **The chaingun's free hand** (DECISIONS T-141; `[left_handed_off_hand]` in
   `data/weapons/viewmodel_offsets.toml`). The game's left glove holds the chaingun by a front handle on its
   left side only: reflected, the right glove's fist closed beside the gun's right side on nothing [static: the

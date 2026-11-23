@@ -4,9 +4,9 @@ Retail `DOOMEternalx64vk.exe`, Steam build 25216728. All addresses are RVAs in t
 `src/vkcore/camera_anim_hook.cpp` (the hook, the logs) and `src/xr_math/camera_anim.cpp` (the math), used by
 the camera hook in `src/vkcore/presenter_head.cpp`.
 
-Status: the engine mechanism is found and handled (opt-in), but the chainsaw pickup's camera move in flat
-play was not reproduced on the rig (section 4). The default build logs what the camera does in every
-forced view and every hands camera animation, so one headset pass through the pickup tells which it is.
+Status: the engine mechanism is found and handled (opt-in). The chainsaw's first pickup runs on the rig since
+2026-11-21 (section 10): with the game's tutorials on, the game holds the player and its own camera still for
+about 4.8 s, and the view stays on the head through it; the "freeze" of the early headset report was that hold.
 
 ## 1. The hands animation's camera [static-verified, rig-verified]
 
@@ -83,7 +83,8 @@ set off) the pickup below moved the rendered view no more than with 1.
   mono, run cs18), the rendered axis stays within 0.9 degrees of the player's view angles for all 4.8 s
   (`camera: forced view 8: 1321 game frame(s) ... up to 0.9 deg`, run cs20), with `g_skipViewEffects` 1 or 0.
 - So the rotation the flat game shows at this pickup was not seen. It may come from the normal approach
-  (the timeline behind the doors), which the rig could not reach. The next headset pass through the pickup
+  (the timeline behind the doors), which the rig could not reach. (2026-11-21, section 10: the 4.8 s hold is the
+  chainsaw tutorial's, with the game's tutorials on; the game's own camera does not move in it.) The next headset pass through the pickup
   with the default build answers it: a `camera: camera animation N starts` line during the pickup means the
   hands camera joint moves it (then `ETERNALVR_CAMERA_ANIMATIONS=1` plays it), and the `camera: forced view N`
   line says how far the rendered view left the view angles in any case.
@@ -192,6 +193,7 @@ Not reached, and why:
   more: with the intro skipped, with the 155 s intro played in full, and with the chainsaw removed from the
   inventory first (`removeInventoryItem weapon/player/chainsaw`). It is not an `interact/...` sync either: the
   Pickup animations setting does not touch it (section 4: a 4.8 s forced view, the view static, in September).
+  Why none ran, and the pickup reached: section 10.
 - No forced view at all: an extra life (`game_pickup_extra_life_extra_life_1_43_e1m3`) and a Sentinel battery
   (`game_progress_sentinel_battery_1_e1m3`) by teleport; the Super Shotgun (`game_pickup_weapon_double_barrel_1_e1m3`)
   is already held in these loads.
@@ -776,3 +778,71 @@ Review round (2026-11-13, runs e1 to e4):
 | d1 | pad-model-screens, extended, on the build before | fails as expected: the map and CODEX pages turned 44.0 and 43.1 degrees under the push and snapped back as much in one frame at the close; no Dossier line |
 | d2 | this change: pad-model-screens (extended), pad-model-fortress, pad-model-combat, menu-modbot-pad | all 4 pass (above) |
 | d3 | pad-x-death (the audit file) | passes |
+
+## 10. The chainsaw's first pickup reached (2026-11-21)
+
+The test PC, OpenXR-Simulator, Route S, about 60 frames a second, not a headset. Map data from the shipped
+`e1m1_intro.entities` (`e1m1_intro_patch3.resources`) [static]:
+
+- The pickup `barge_pickup_weapon_chainsaw_1` (`pickup/weapon/chainsaw`, a touch pickup, `forceEquip`) lies on the
+  lower floor of the room before the chainsaw doors, at (35.81, -1551.34, 10.03); it targets
+  `barge_target_timeline_get_chainsaw` and the two `*_chainsaw_picked_up` relays. The checkpoint after it,
+  `cp_02_post_modbot` (`checkpoint_target_change_layer_cp_02`), removes it on load (`barge_target_timeline_cp_02`).
+- The map's checkpoint names (`checkpointName` of the 25 `target/change_layer` entities); before the pickup:
+  `from_intro`, `cp_01`, `cp_01_post_gk_tutorial`, `cp_01_mission_select`. Mission Select starts at
+  `cp_01_mission_select`, which opens the chainsaw doors once the player walks to them
+  (`barge_trigger_trigger_mission_select_open_door`).
+
+How it runs [rig, log]:
+
+- **Mission Select with the 100% save spawns no pickup.** Hell on Earth from Game Slot 1 (run x2, the entity dump):
+  the doors and the mod bot are there, `barge_pickup_weapon_chainsaw_1` is not (the save holds the chainsaw).
+- **A `+map` load spawns it**, the developer loadout (`devinvloadout/sp/e1m1`) having no chainsaw:
+  `-checkpoint cp_01_post_gk_tutorial` puts the player at the checkpoint's start (36, -1594) but spawns only the world
+  layer (`WARNING: Unable to activate checkpoint from layer cp_01_post_gk_tutorial`), and the pickup is in it.
+  Walking onto it picks it up (runs x4: placed by `setviewpos 35.8 -1553.5 11.6 90` on the room's floor 2.2 m short
+  of it, or on it, then the move stick).
+- **The game's tutorials decide what follows.** The rig's profile has them off (`Cvar 'g_setting_tutorials' was
+  modified to '0'` as it loads), and every scenario schedule before this one set `g_setting_tutorials 0`: then the
+  pickup is a plain pickup: `CHAINSAW ACQUIRED`, the hands bring the chainsaw up for about 4 s with the view
+  head-tracked, no forced view, no teleport (x4, x5). That is why the teleports of sections 4 and 7 ran no pickup.
+  With `g_setting_tutorials 1` (x6, x7): `controllers: forced view starts (view inhibited; inhibit 0x1F86F)` as the
+  player touches it, both hands bring the chainsaw up (`CHAINSAW ACQUIRED`, "Press [X] to view Codex entry"), and
+  4.8 s later `game: teleport 2: the player moved 82.7 m in one game frame (35.8 -1552.6 10.0 -> 79.0 -1623.0 6.0 ...)`
+  into the grey chainsaw training room (`tutorial_info_teleport_destination_chainsaw_tutorial`), the forced view
+  ends 2 s after it (about 420 game views in all) and the tutorial's popup comes up on the menu panel
+  (`menu: the game shows its cursor (a popup over the game ...)`; "Press Right Stick Up to instantly chainsaw
+  demons ...", A to dismiss); after A (Space) three zombies stand on their pads and the objective is
+  "CHAINSAW THE DEMONS". `activateCheckPoint checkpoint_target_change_layer_cp_01` before it changes nothing (x5, x6).
+- **The game's camera does not move in the hold**: the trace's game camera is the player's own view (the hand's
+  pitch under hand aim) for all 282 game views of the 4.8 s, and the same after the teleport. So the flat game
+  shows a still view there, and the "view held still until the tutorial popup" of the early headset report is this
+  hold, not a camera animation of the pickup.
+- **What the layer shows**: the view stays on the head through the hold and the teleport (the written view less the
+  head's within 0.00 degrees under hand aim; under head aim with the head sweeping 8 degrees, within 0.2 degrees a
+  game view), the hands and the chainsaw in front of it, no frame on the flat screen. Under head aim the game's turn
+  of the player to the room's facing at the teleport turns the view's body once with the cut (0.6 to 3.5 degrees in
+  the runs, the head's sweep at that moment); the scene changes there anyway. Pickup animations (Still view, Camera
+  moves) start nothing: not an `interact/` sync.
+
+Fault found in the pickup's view: none. One in gamepad mode (run c3 below): the tutorial's popup showed the
+keyboard's "[SPACE] TO DISMISS" and the pad's A did not close it; fixed. The `pickup-chainsaw` scenarios (`qa-scenarios-pickup.ps1`, by name: the tutorial on through
+`ETERNALVR_DEBUG_CVARS`, the placement at 32 s of the schedule since the clock can start before e1m1's intro, whose
+skip takes about 25 s) check the hold, the teleport, the popup and its dismissal, that no Pickup animations episode
+starts, no screen run, the game's camera still in the hold and the view on the head.
+
+| Run | What | Result |
+|---|---|---|
+| x1, x2 | Mission Select's Hell on Earth (Game Slot 1), and `-checkpoint cp_01_post_gk_tutorial`, walking forward | the 100% save: no pickup spawned; the checkpoint: stopped at a pillar before the room |
+| x3 | placed in the room, walking through the pickup, with and without `activateCheckPoint` (tutorials off) | picked up, no forced view |
+| x4 | placed short of it or on it: hand aim, gamepad mode, the chainsaw removed first, god mode off (tutorials off) | picked up in each with the motion controllers (`held item 'weapon/player/chainsaw'`), the bring-up head-tracked, no forced view; gamepad mode logs no held item, so not shown there |
+| x5 | the schedule's `g_setting_tutorials 0` left out | the profile's 0 holds: as x4 |
+| x6, x7 | `g_setting_tutorials 1`, hand aim and head aim with the head sweeping; x7 dismisses the popup | the hold, the teleport, the popup (above) |
+| c1, c2 | the `pickup-chainsaw` scenarios: hand, head and view aim, Still view and Camera moves | pass; the hold 281 to 290 game views, the game's camera 0.00 degrees, the written view less the head's 0.00 under hand and view aim, within 0.23 a game view under head aim (the teleport's turn 0.6 and 3.5); view aim's first try (c1) placed the player while the intro cutscene still ran (the schedule's clock started before it), hence the placement at 32 s |
+| c3 to c6 | gamepad mode | the hold and teleport as above (the teleport's turn 5 to 8 degrees, the head's sweep); the popup read "[SPACE] TO DISMISS" and the pad's A did not close it, its B did; with `ETERNALVR_BUTTON_PROMPTS=0` (c6) the game's own pad glyph instead. Cause: the layer held the game on its keyboard prompts (`swf_platformOverride 2`) in gamepad mode too, where no prompt is renamed to a VR button; fixed (`input::holdsKeyboardPrompts`, VR_CONTROLLERS.md) |
+| c7 | the fix: `pickup-chainsaw-pad`, `-play-pad`, `menu-crystal-pad`, `pickup-nest-pad`, `pad-model-combat` (the weapon wheel by the stick), `pad-dossier-close`, `baseline` | all pass; the popup with the pad's glyph, closed by B; with the motion controllers `swf_platformOverride 2` still held |
+
+Not checked: a headset; other frame rates; a natural approach through the barge (the `+map` load lacks the
+checkpoint's layers; Mission Select of a save that holds the chainsaw spawns no pickup; a new game was not
+started); the chainsaw kill in the training room (the three zombies stand on raised pads the scripted walk did
+not reach, run x8), so the chainsaw kill's sync name is still not seen on the rig.

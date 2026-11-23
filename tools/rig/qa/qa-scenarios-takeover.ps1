@@ -1,5 +1,5 @@
 # The camera takeovers the other scenario files leave out (docs/rig-findings/camera-takeovers.md, ROADMAP M7): glory
-# kills in each of the four views, the player's death, a cutscene in both Cutscene views, swimming, climbable walls. Each checks the
+# kills in each of the four views, chainsaw kills, the player's death, a cutscene in both Cutscene views, swimming, climbable walls. Each checks the
 # takeover's entry and exit lines and, from the camera trace (ETERNALVR_TEST_CAMERA_TRACE), what the view did: the
 # general rule (the game camera's pitch and roll never reach the headset; the written view's pitch and roll are the
 # head's) and the view's own rule. The simulator's head sways (ETERNALVR_TEST_HEAD_SWAY) so a view that only takes the
@@ -33,6 +33,15 @@
 #       The same four under head aim, the head swaying round 20 degrees down so the teleported demon lands in reach and
 #       the shots hit it; follow takes the body as the camera's yaw less one offset per kill (the head yaw the game's
 #       aim holds).
+#   chainsaw-kill, chainsaw-kill-head, chainsaw-steady, chainsaw-steady-head
+#       The glory kills' barge, sway and trace with follow (unset) or steady, under hand or head aim; the fuel given
+#       before each teleport (`give all`), no stagger cvars, each zombie sawn by the chainsaw (the turn stick up, the
+#       weapon hand 8 to 22 deg down, four tries at most). Each: 3 chainsaw kills or more, a chainsaw kill being a kill
+#       sync within 0.5 s of `controllers: action chainsaw` (the saw's sync is the glory kill's own `syncmelee/<demon>`),
+#       each followed within 0.5 s by `glory: kill N starts (<view>...)` and its end; in the kills' trace lines (up to
+#       the end line's millisecond) the written pitch and roll are the head's (within 0.5 deg); follow: the body yaw is
+#       the camera's on every line but the kill's first (within 2 deg; under head aim less one offset per kill); steady:
+#       the written view less the head's angles stays as at the kill's start (within 0.5 deg).
 #   death-camera
 #       e1m3 cp_03_shoot_gate, the schedule's `kill` (as crosshair-hold), ETERNALVR_TEST_CAMERA_TRACE=all: exactly one
 #       `game: the player died (death 1)` and then, after A on the death screen (its Load Checkpoint), `game: a living
@@ -371,6 +380,108 @@ $takeoverScenarios += @(foreach ($base in @($takeoverScenarios | Where-Object { 
     $v.Proves = "$($base.Proves) (head aim, the head swaying round 20 degrees down)"
     $v
 })
+
+# ---- Chainsaw kills ---------------------------------------------------------------------------------------------
+
+# The barge's zombies as for the glory kills, each sawn instead (the chainsaw: the turn stick up), the fuel given
+# before each teleport (`give all`), no stagger and no ai_sync_onlyDieFromGK. The saw's sync has the glory kill's
+# own entityDef (rig: `syncmelee/zombie_tier1`, 32 ms after the press), so comfort::isKillSync takes it as a kill and
+# the layer shows it as a glory kill: the same episode lines and the same views (camera-takeovers.md row 3). A chainsaw
+# kill here is such a sync within 0.5 s of the press (`controllers: action chainsaw`).
+$script:QaChainsawKills = 3
+$script:QaChainsawWave = '{0}:god;g_setting_hud_auto_dismiss_tutorials 1;g_setting_tutorials 0;sync_printInteractionAndAnimationName 1|{1}:activateCheckPoint checkpoint_target_change_layer_cp_01|{2}:setviewpos 36 -1590 18.75 90|{3}:activatetargets barge_trigger_facing_first_door'
+$script:QaChainsawTeleport = '{0}:give all;nextActiveAI;ai_teleportToPlayer trace'
+$script:QaChainsawSchedule = (@(($script:QaChainsawWave -f 20, 21, 24, 25)) + @($script:QaGloryTeleports[0..2] | ForEach-Object { $script:QaChainsawTeleport -f $_ }) +
+    '85:map game/sp/e1m1_intro/e1m1_intro' + @(($script:QaChainsawWave -f 130, 131, 134, 135)) +
+    @($script:QaGloryTeleports[3..7] | ForEach-Object { $script:QaChainsawTeleport -f $_ })) -join '|'
+$script:QaChainsawSync = "controllers: sync '([^']+)' \(a kill\)"
+
+# The kill syncs within 0.5 s after a chainsaw press (objects T, M as Get-QaTqEvents').
+function Get-QaChainsawKills($Ctx) {
+    $presses = @(Get-QaTqEvents $Ctx 'controllers: action (chainsaw)')
+    return @(Get-QaTqEvents $Ctx $script:QaChainsawSync | Where-Object { $s = $_.T; @($presses | Where-Object { $_.T -le $s -and $_.T -ge $s - 0.5 }).Count -gt 0 })
+}
+
+$script:QaChainsawTimeline = {
+    param($c)
+    $rest = $script:QaGloryRest
+    Write-QaInput $c @('right.aim = 0, -25', $rest)
+    $k = 0
+    foreach ($at in $script:QaGloryTeleports) {
+        if (@(Get-QaChainsawKills $c).Count -ge $script:QaChainsawKills) { break }
+        $k++
+        if (-not (Wait-QaLog $c ('debug-commands: {0}\.0 s: nextActiveAI' -f $at) 120)) { Add-QaNote $c "teleport $k : the one at $at s was not logged"; continue }
+        Wait-QaSeconds $c 1
+        $before = @(Get-QaChainsawKills $c).Count
+        $got = $false
+        for ($t = 1; $t -le 4 -and -not $got; $t++) {
+            $p = @(-12, -18, -8, -22)[$t - 1]
+            Write-QaInput $c @("right.aim = 0, $p", $rest, 'right.stick = 0, 1'); Wait-QaSeconds $c 0.3
+            Write-QaInput $c @("right.aim = 0, $p", $rest)
+            Wait-QaSeconds $c 0.5
+            if ($k -eq 1 -and $t -eq 1) { Save-QaXrShot $c 'saw1' }
+            Wait-QaSeconds $c 1.5
+            $got = @(Get-QaChainsawKills $c).Count -gt $before
+        }
+        if (-not $got) { Add-QaNote $c "teleport $k : no chainsaw kill after 4 tries" }
+        Write-QaInput $c @('right.aim = 0, -25', $rest)
+        Wait-QaSeconds $c 4
+    }
+    Wait-QaSeconds $c 11
+}
+
+function New-QaChainsawScenario([string]$Name, [string]$View, [string]$Aim, [string]$Proves, [string[]]$ExtraEnv) {
+    $sway = if ($Aim -eq 'head') { 'ETERNALVR_TEST_HEAD_SWAY=8,8,3,0,-20' } else { $script:QaTqSway }
+    return @{
+        Name = $Name; Kind = 'game'; OnlyByName = $true; GloryView = $View; Aim = $Aim
+        Proves = $Proves
+        Map = 'game/sp/e1m1_intro/e1m1_intro'
+        Env = @("ETERNALVR_AIM=$Aim", 'ETERNALVR_TEST_CAMERA_TRACE=1', $sway, "ETERNALVR_DEBUG_COMMANDS=$script:QaChainsawSchedule") + $ExtraEnv
+        Input = @('right.aim = 0, -25', $script:QaGloryRest)
+        Timeline = $script:QaChainsawTimeline
+        Asserts = {
+            param($c)
+            # Each chainsaw sync followed within 0.5 s by a glory episode's start in this view, and its end.
+            $view = $c.Scenario.GloryView
+            $syncs = @(Get-QaChainsawKills $c)
+            $kills = @(Get-QaTqEpisodes $c "glory: kill (\d+) starts \($view" 'glory: kill (\d+) ends; the view''s body turned')
+            $matched = @($syncs | ForEach-Object { $s = $_; $kills | Where-Object { $_.Start -ge $s.T - 0.05 -and $_.Start -le $s.T + 0.5 -and $_.End -ge 0 } | Select-Object -First 1 })
+            $names = @($syncs | ForEach-Object { $_.M.Groups[2].Value } | Sort-Object -Unique) -join ', '
+            Add-QaResult $c "$script:QaChainsawKills chainsaw kills or more, each a sync taken as a kill followed by glory: kill N starts ($view) and its end" `
+                ($syncs.Count -ge $script:QaChainsawKills -and $matched.Count -eq $syncs.Count) ('{0} sync(s) ({1}), {2} with their episode' -f $syncs.Count, $names, $matched.Count)
+            Test-QaAbsent $c 'glory: kill \d+ still running after' -Regex
+            $rows = Get-QaTqTrace $c
+            $tilt = 0.0; $kept = 0.0; $wrong = 0; $lines = 0; $text = @()
+            foreach ($e in $matched) {
+                # Up to the end line, not its own millisecond: a trace line logged with it is the view after the kill
+                # (rig, chainsaw-kill-head: the camera back on the player's yaw, 9 deg off the body, at the end's time).
+                $span = Select-QaTqSpan $rows $e.Start ($e.End - 0.0005)
+                $m = Measure-QaTqSpan $span
+                $lines += $m.Lines
+                $tilt = [Math]::Max($tilt, $m.Tilt)
+                $kept = [Math]::Max($kept, [Math]::Max($m.KeptY, [Math]::Max($m.KeptP, $m.KeptR)))
+                $after = @($span | Select-Object -Skip 1)
+                $offset = if ($c.Scenario.Aim -eq 'head' -and $after.Count) { Get-QaTqWrap ($after[0].Body - $after[0].Y) } else { 0.0 }
+                $wrong += @($after | Where-Object { [Math]::Abs((Get-QaTqWrap ($_.Body - $_.Y - $offset))) -gt 2 }).Count
+                $text += "kill $($e.N): $(Format-QaTqSpan $m)"
+            }
+            $detail = $text -join '; '
+            Add-QaResult $c 'trace: in the chainsaw kills the written pitch and roll are the head''s (within 0.5 deg)' ($lines -ge 20 -and $tilt -le 0.5) $detail
+            if ($view -eq 'follow') {
+                Add-QaResult $c 'trace: follow: the body yaw is the kill camera''s on every line of each kill but its first (within 2 deg)' ($lines -ge 20 -and $wrong -eq 0) "$wrong of $lines line(s) off"
+            } else {
+                Add-QaResult $c 'trace: steady: the written view less the head''s angles stays as at each kill''s start (within 0.5 deg)' ($lines -ge 20 -and $kept -le 0.5) ('{0:N2} deg at most' -f $kept)
+            }
+        }
+    }
+}
+
+$takeoverScenarios += @(
+    (New-QaChainsawScenario 'chainsaw-kill' 'follow' 'hand' 'Chainsaw kills on the barge''s zombies under hand aim with follow the camera (the defaults): each saw a sync the layer takes as a glory kill, its start and end logged, the camera''s pitch and roll never in the view, the body on the camera''s yaw' @()),
+    (New-QaChainsawScenario 'chainsaw-kill-head' 'follow' 'head' 'Chainsaw kills as chainsaw-kill under head aim (the head swaying round 20 degrees down)' @()),
+    (New-QaChainsawScenario 'chainsaw-steady' 'steady' 'hand' 'Chainsaw kills as chainsaw-kill with the steady view: the view''s rotation changes only with the head''s during them' @('ETERNALVR_GLORY_KILLS=steady')),
+    (New-QaChainsawScenario 'chainsaw-steady-head' 'steady' 'head' 'Chainsaw kills with the steady view under head aim' @('ETERNALVR_GLORY_KILLS=steady'))
+)
 
 # ---- The player's death -----------------------------------------------------------------------------------------
 

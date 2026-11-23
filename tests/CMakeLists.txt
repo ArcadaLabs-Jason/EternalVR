@@ -321,10 +321,13 @@ evr_add_test(evr_mp_policy_tests
         platform/mp_policy/profile_cvars_tests.cpp
         platform/mp_policy/saved_cvars_tests.cpp
         platform/mp_policy/trip_listeners_tests.cpp
-    DEPENDS evr_mp_policy evr_stereo_seq)
+    DEPENDS evr_mp_policy evr_stereo_seq evr_parallel_eyes_settings)
 # The argument cases the launcher's ArgumentPolicy tests read as well.
 target_compile_definitions(evr_mp_policy_tests
-    PRIVATE EVR_MP_ARGUMENT_CASES="${CMAKE_CURRENT_SOURCE_DIR}/platform/mp_policy/argument-cases.txt")
+    PRIVATE EVR_MP_ARGUMENT_CASES="${CMAKE_CURRENT_SOURCE_DIR}/platform/mp_policy/argument-cases.txt"
+            # The launcher's command-line cvars and CPU Saver items, checked against the game settings fields.
+            EVR_FORCED_CVARS_FILE="${PROJECT_SOURCE_DIR}/launcher/data/forced-cvars.txt"
+            EVR_CPU_SAVER_FILE="${PROJECT_SOURCE_DIR}/launcher/data/cpu-saver.txt")
 
 evr_add_test(evr_key_injection_tests
     SOURCES

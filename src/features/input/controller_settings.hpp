@@ -368,6 +368,12 @@ const char* armFaultName(ArmFault fault);
 // is written for the Slayer or the demon, so the demon keeps the game's own aim whatever ETERNALVR_DEMON_AIM
 // says.
 AimSource demonAimSource(const ControllerSettings& settings);
+
+// Whether the game is held on its keyboard prompts (swf_platformOverride 2), which the prompt hooks rename to
+// the VR buttons: with the motion controllers and their button prompts on. In gamepad mode
+// (ETERNALVR_CONTROLLERS=0) no prompt is renamed, so the hold showed a pad player the keyboard's keys
+// ("[SPACE] TO DISMISS" on a tutorial popup the pad closes with B): the game's own pad prompts stay there.
+bool holdsKeyboardPrompts(const ControllerSettings& settings);
 const char* inputPathName(InputPath path);
 
 } // namespace evr::input

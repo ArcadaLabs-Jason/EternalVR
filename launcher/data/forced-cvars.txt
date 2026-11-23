@@ -20,7 +20,9 @@ r_hdrDisplay | 0
 # The comfort set, only in mono. In stereo the layer holds every one of them at run time from Route S's
 # first present (stereoComfortCvars in src/stereo_seq/seq_settings.cpp, docs/VR_STEREO.md "Cvars"): the
 # game's own settings override the command line anyway, and a multiplayer guard trip gives the player's
-# values back only for cvars the layer wrote. Still restored after the session.
+# values back only for cvars the layer wrote. Head-tracked mono holds them at run time too, at these values
+# (monoVrHeldCvars; profile_cvars_tests.cpp keeps the two in step): on the test PC most of these lines never
+# took (docs/rig-findings/profile-leak.md, "Mono"). Still restored after the session.
 r_motionblur | 0 | mono
 # The dash's radial blur, which the game sets to full scale itself after r_motionblur 0 (session-keys.txt).
 r_blurRadialScale | 0 | mono
@@ -29,10 +31,10 @@ r_chromaticAberration | 0 | mono
 r_vignette | 0 | mono
 # Camera motion the head did not make (view bob, kicks, shakes). view_skipKicks 1 is the game's default;
 # view_skipShakes is not (the game registers it at 0). The game saves view_skipShakes into profile.bin, which no
-# restore covers, and sets it from there at the profile's load, after the command line. In mono the profile's
-# value wins, so this line neither takes effect nor leaks (rig 2026-10-12: +view_skipShakes 1 over a profile
-# holding 0, and the game saved 0 after the load). In stereo the layer holds it and keeps the player's own value
-# in the profile (vkcore/profile_hooks.hpp).
+# restore covers, and sets it from there at the profile's load, after the command line, so this line alone
+# neither takes effect nor leaks (rig 2026-10-12: +view_skipShakes 1 over a profile holding 0, and the game saved
+# 0 after the load). In stereo and in head-tracked mono the layer holds it and keeps the player's own value in the
+# profile (vkcore/profile_hooks.hpp).
 pm_noBob | 1 | mono
 view_skipKicks | 1 | mono
 view_skipShakes | 1 | mono

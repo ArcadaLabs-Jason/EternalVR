@@ -165,7 +165,7 @@ them is worse for you than described here.
   cause is fixed and the fix is on again; on my test PC both eyes now show the same effects in that mission and
   others, and particles also show in the right eye's ray-traced reflections. If you see squares, flicker or an
   effect in one eye only, please tell me.
-- **Some effects are off in stereo.** Motion blur (also the zoom blur when you dash), depth of field,
+- **Some effects are off in VR.** Motion blur (also the zoom blur when you dash), depth of field,
   chromatic aberration and vignette are off in VR, and so are the red tint and blur when you take damage
   (the arrows showing where the hit came from and the low health warning stay). The game's other screen
   overlays are off too: the red edges at low health, double vision and screen shakes, and the wobble of
@@ -173,35 +173,40 @@ them is worse for you than described here.
   damage and low-health tint; the mod filters that off the floating HUD panel (see "Squares on the HUD
   when you get hit" below). A few effects lose the smoothing they get
   over several frames, because the two eyes would share it: water reflections still show, only that
-  smoothing is off. The picture looks slightly different from the flat game.
+  smoothing is off. The picture looks slightly different from the flat game. In Mono (VR mode on the Advanced
+  tab) the same effects are now off too, camera shake and view bob included, all but the underwater wobble
+  (both eyes see one picture there). Until now most of them stayed as your flat game had them in Mono: the mod
+  asked the game to turn them off when it started, and on my test PC the game ignored that for all but motion
+  blur, depth of field and HDR. Your own settings, Screen Shake included, are still yours in the flat game
+  afterwards (checked on my test PC, Steam version, also after the game was killed mid-session). Not tried in a
+  headset yet.
 - **TAA on some moving shapes.** TAA (the game's own anti-aliasing, the default) keeps a separate history
   for each eye, and moving demons look the same in both eyes. Props that play a recorded animation (swaying
   banners, hanging corpses, the damned souls reaching out of the walls) were smeared in the right eye before
   0.1.31; they now get their motion in both eyes, which has not been checked in a headset yet. If one eye
   still looks different on a moving shape, please report where. The launcher's "Anti-aliasing" setting can
   switch to Off (sharp, with some shimmer on edges) or DLSS.
-- **Pickup animations keep your view still.** At a pickup that moves the game's camera (a Praetor token or
-  an automap station) your hands play the animation in front of you, but the view stays where your head
-  points instead of tilting with the camera. A gore nest is different: its camera swings far to the side, so
-  the view turns toward the nest in one go, follows that swing and stays facing that way after. I checked that
-  again on my test PC after the Sentinel Crystal fix below (about 60 frames a second, not in a headset yet): the
-  turn now comes two frames after the game's camera jumps, still in one go, then follows the swing and leaves
-  you facing where the game does, as before (one gore nest, aiming with the hand). "Pickup
-  animations: Camera moves (intense)" on the Play tab tilts and turns the view with the camera and then brings it back
-  to where you were facing; that one is new and not tried in a headset yet. It follows the camera's smooth
-  motion only, up to 45 degrees in any direction, and leaves out the game's jumps: when a gore nest's camera
-  jumps around to the nest's far side, your view doesn't. On my test PC I checked the token, the automap
-  station, gore nests and the Slayer Gate's nest with both settings (after the Slayer Gate's nest the game
-  moves you into the gate's arena and turns you to face it, the same with either setting). A Sentinel Crystal,
-  a rune and a mod bot run there now too (no headset yet, aiming with the hand): each one's menu comes up in
-  front of you and works with the pointer. On my test PC (one save, about 60 frames a second), once you pick,
-  your hands crush the crystal, take the rune or grab the drone's case in front of you with either setting,
-  and you keep facing the same way after: the view no longer flicks about 10 degrees and back as the crystal's
-  menu closes, and with "Camera moves (intense)" it no longer turns as the crush ends. The rune and the mod bot showed
-  nothing to fix there. Other frame rates haven't been checked yet, and I couldn't get the chainsaw pickup to run
-  there. If you look away from the crystal while your hand points at it, the crush plays where the hand pointed,
-  so you'd have to turn your head to see it (checked again on my test PC in this version: with the head turned
-  right round, the crush played straight behind the view).
+- **Pickup animations keep your view still.** At a pickup that moves the game's camera (a Praetor token or an
+  automap station) your hands play the animation in front of you, but the view stays where your head points
+  instead of tilting with the camera. A gore nest is different: its camera swings far to the side, so the view
+  turns toward the nest in one go, follows that swing and stays facing that way after. I checked that again on
+  my test PC after the Sentinel Crystal fix below (about 60 frames a second, not in a headset yet): the turn now
+  comes two frames after the game's camera jumps, still in one go, then follows the swing and leaves you facing
+  where the game does, as before (one gore nest, aiming with the hand). "Pickup animations: Camera moves
+  (intense)" on the Play tab tilts and turns the view with the camera and then brings it back to where you were
+  facing; that one is new and not tried in a headset yet. It follows the camera's smooth motion only, up to 45
+  degrees in any direction, and leaves out the game's jumps: when a gore nest's camera jumps around to the
+  nest's far side, your view doesn't. On my test PC I checked the token, the automap station, gore nests and the
+  Slayer Gate's nest with both settings (after the Slayer Gate's nest the game moves you into the gate's arena
+  and turns you to face it, the same with either setting). A Sentinel Crystal, a rune and a mod bot run there
+  now too (no headset yet, aiming with the hand): each one's menu comes up in front of you and works with the
+  pointer. On my test PC (one save, about 60 frames a second), once you pick, your hands crush the crystal, take
+  the rune or grab the drone's case in front of you with either setting, and you keep facing the same way after:
+  the view no longer flicks about 10 degrees and back as the crystal's menu closes, and with "Camera moves
+  (intense)" it no longer turns as the crush ends. The rune and the mod bot showed nothing to fix there. Other
+  frame rates haven't been checked yet. If you look away from the crystal while your hand points at it, the
+  crush plays where the hand pointed, so you'd have to turn your head to see it (checked again on my test PC in
+  this version: with the head turned right round, the crush played straight behind the view).
 
   Aiming with your head (Aim with: Head) and with a gamepad, I've now run the token, a gore nest, the crystal, the
   rune and the mod bot too, with both settings and the head moving during the pickup (my test PC, about 60 frames a
@@ -229,8 +234,14 @@ them is worse for you than described here.
   10 degrees to the side and back as their animation started, with either setting; that's fixed. With the mouse
   nothing turns your aim back after a pickup, so "Camera moves (intense)" can't keep you facing where you were there:
   at a gore nest the view turns to the nest's side once, like "Still view", and you end up facing where the game
-  does. The tilt and roll still play. If the view freezes or jumps at a pickup (the chainsaw froze in an early test),
-  please tell me which one.
+  does. The tilt and roll still play.
+
+  The chainsaw's first pickup now runs on my test PC too (aiming with the hand, the head, a gamepad and the mouse,
+  with both Pickup animations settings, about 60 frames a second, not in a headset yet). With the game's tutorials
+  on, the game holds you in place for about 5 seconds while your hands bring the chainsaw up, then moves you to the
+  chainsaw training room and shows its tutorial. The flat game's view doesn't move during those 5 seconds either,
+  and in VR your view keeps following your head the whole time; that hold is what looked like a freeze in an early
+  test. Nothing to fix there. If the view freezes or jumps at a pickup, please tell me which one.
 - **See-through surfaces while you turn.** In an early headset test, stained-glass windows and similar glass
   smeared while turning; back then the two eyes shared the glass's history. Each eye keeps its own now, and on
   my test PC glass under head motion looks the same in both eyes and the same as in the flat game. Not
@@ -443,9 +454,9 @@ them is worse for you than described here.
 - **The Heavy Cannon's Precision Bolt scope does not magnify.** Zooming in keeps the gun in your hand and
   the HUD up, with no scope overlay, and the view stays at your headset's field of view. With hand aim the
   Aim dot shows where shots go. With head aim, since 0.1.87 the Aim dot sits in the middle of your view while
-  zoomed, where the shot goes (Steam version; not tried in a headset yet).
-- **On the Game Pass version, head aim may still show the Precision Bolt's scope ring** when zoomed in (the
-  zoom bit is unchecked there; I have not tested it).
+  zoomed, where the shot goes (not tried in a headset yet). On the Game Pass version head aim showed the
+  Precision Bolt's scope ring while zoomed until now; it's gone there too (checked on my test PC with the Game
+  Pass version, zoomed in a level: the ring before the fix, none after).
 - **The Chaingun's Energy Shield** now goes up in front of the gun, along your aim, at the size the game
   gives it in the world (before, it sat where the flat view puts it, so the gun in your hand covered it). I
   checked it on my test PC, not in a headset yet, so I don't know yet whether its size and distance feel right.
@@ -582,7 +593,8 @@ them is worse for you than described here.
   controllers, and the weapon wheel shows straight ahead. They have been tried on a headset simulator with a
   virtual Xbox pad, not in a headset yet. Still missing with a gamepad: the in-headset screenshot (it needs
   the motion controllers), the vignette for a dash or for keyboard and mouse movement, and the equipment
-  launcher on a bHaptics vest.
+  launcher on a bHaptics vest. The game's button prompts now show your pad's buttons with a gamepad; before they
+  showed keyboard keys, like "[SPACE] TO DISMISS" on a tutorial popup that the pad closes with B (my test PC).
 
 ## Menus
 
@@ -611,12 +623,20 @@ them is worse for you than described here.
   headset, with DLSS). On my test PC the gun shows no ghost with TAA or DLSS, in either eye or in the flat
   game, so it may come from how the headset shows the menu; if you see it, please tell me your headset and
   your anti-aliasing setting.
-- **The Fortress of Doom** has a few rough spots: some outside surfaces look wrongly shaded, a canister can
-  show black without its texture, and the old computer is hard to use. That's from a headset session in
-  October, before the fixes to reflections and wet floors; on my test PC the command deck and the dais look
-  right in this version, but I haven't found the canister or the outside spots there. The displays in the
-  Slayer's office looked ghosted in my headset (with DLSS); on my test PC their moving bars blur a little the
-  same way in both eyes and in the flat game, with TAA and with DLSS.
+- **The Fortress of Doom's old computer** (the beige PC by the big window in the Slayer's quarters) opens with
+  Use and closes with the Menu button, but in between it only listens to the keyboard (arrow keys, Enter,
+  Esc) or a gamepad, so with the motion controllers you can't pick a file or play classic DOOM on it yet (on
+  my test PC a gamepad picked the file and started classic DOOM). To open it, aim your weapon hand well down
+  at it: it sits low, and a hand pointed ahead just punches.
+- **The Fortress of Doom's outside and a black canister**: in a headset session in October some outside
+  surfaces looked wrongly shaded, popping in with the angle, and a canister looked black. On my test PC I went
+  back to the exact spots from that session: in this version the outside looks the same in both eyes and in
+  the flat game, also while turning (the versions back then had a decal problem that fits, fixed since; with
+  Foveated rendering on, the edges of the view are a little softer, as designed). The canister, a glass tank
+  behind the long table in the room with the candles, is just as dark in the flat game: the game barely
+  lights it, so in a headset it can look black. If something outside still changes as you turn, please tell
+  me where. The displays in the Slayer's office looked ghosted in my headset (with DLSS); on my test PC their
+  moving bars blur a little the same way in both eyes and in the flat game, with TAA and with DLSS.
 
 ## Moments VR doesn't handle yet
 
@@ -633,12 +653,17 @@ them is worse for you than described here.
   other (checked on my test PC); the Ion Catapult and the escape pod in Mars Core look like cutscenes too, from
   the game's files (I haven't got either going on my test PC yet). None of it has been tried in a headset. With the
   Vignette off nothing changes. If a ride makes you queasy, please tell me which.
-- **Photo mode** is now kept off in VR (with Mono picked on the Advanced tab it still isn't): its free camera
-  doesn't follow the headset. On my test PC it went straight back off when I turned it on during play. Your own
-  Photo mode setting should come back in the flat game: the mod keeps the VR value out of your saved settings the
-  same way it does for camera shake, though I haven't checked that over a real session yet. If the mod can't
-  find the setting in your copy of the game (I could only check the Steam version), it leaves photo mode as
-  you set it.
+- **Photo mode** is kept off in VR, now with Mono picked on the Advanced tab too. It isn't made for VR: when I
+  let it through on my test PC (Steam version, both modes), the mod showed it like a menu, the view still turned
+  with your head, and its third-person view put you behind your character. The mod no longer touches your own
+  Photo mode setting for that. In 0.1.99 to 0.1.101 it switched that setting off while you played in VR, and the
+  game also saved the off in a second spot in your profile the mod didn't cover, so after a VR session photo
+  mode stayed off in the flat game too (I checked that over a real session on my test PC, Steam version). If you
+  had Photo mode on and it's been off since, turn it back on in the game's Settings, Game. Now the mod keeps the
+  game's own "photo mode allowed here" switch off instead, which the game never saves. On the same PC, with
+  Photo mode on before, it was still on afterwards in the flat game after a normal quit, after the game was
+  killed mid-session, and with Mono. The Game Pass version has the same code for this (checked in its files, not
+  in play).
 
 ## Launcher and settings
 

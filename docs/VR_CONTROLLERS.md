@@ -1434,7 +1434,10 @@ have an A (`vkcore/prompt_hooks.cpp`, `features/input/button_labels.hpp`).
   key presses, and the game's key bindings menu lists the real binds. A popup's fixed key token names the
   button that sends that key: tutorial popups take Space for the jump button, E for melee and Tab for the
   Dossier, so "[SPACE] TO DISMISS" reads "[A] TO DISMISS" on Touch. The game is held on its keyboard
-  prompts (`swf_platformOverride 2`), so a gamepad or Steam Input cannot switch them to pad glyphs.
+  prompts (`swf_platformOverride 2`), so a gamepad or Steam Input cannot switch them to pad glyphs. Only with
+  the motion controllers (`input::holdsKeyboardPrompts`): in gamepad mode no prompt is renamed, and the hold
+  showed a pad player the keyboard's keys ("[SPACE] TO DISMISS" on the chainsaw's tutorial popup, which the
+  pad closes with B, not A); there the game's own pad prompts stay (rig, 2026-11-21).
 - **The weapon info row.** The HUD's labels above the Flame Belch, chainsaw and equipment icons (and the
   Crucible's and switch equipment's) are sized to their text over icons about 60 px apart in a 2048 px wide
   GUI, room for the game's one-letter keys: three full names overlapped into one bar ("Left Grip ght St...
@@ -1638,10 +1641,15 @@ scoped, the HUD included. Now:
   scope ring)` / `... ends ...`, the first 20 together). Under head aim the game's crosshair is therefore off
   while scoped, so the layer's aim dot (Aim dot on the Play tab) marks the middle of the view instead, where the
   Precision Bolt's shot goes: the dot's quad head-locked (VIEW) at the set distance (T-182; before, there was
-  no aim mark at all). The zoom flag is read on the Steam build only: on Game Pass its
-  bit is not checked yet, so there the hold stays off for a scoped zoom (logged once) and head aim shows the
-  scope's ring as in 0.1.50; the decl writes should work there (the type info of every class read is the
-  Steam build's), but no Game Pass run has checked them yet.
+  no aim mark at all). The zoom flag is read on both known builds: on Game Pass 1.0.56.0 the function that sets
+  and clears it (0x1466654 / 0x14666A4) is the Steam one's (0x1462C50) with only relative addresses moved, and
+  every access to `+0x736C..+0x7370` in `.text` is the same 406 instructions in both builds [static]; an unknown
+  build leaves the hold off (logged once). Rig (Game Pass through the launcher's window, e1m3 `cp_03_shoot_gate`,
+  head aim, the Heavy Cannon's two mods held): before, `zoom look: Game Pass 1.0.56.0: the zoom flag is not
+  checked on this build` and the scope's ring in the headset's shot while the Precision Bolt was zoomed; after,
+  `zoom look: scoped zoom starts: the reticle style held at none (no scope ring)`, `hud_reticle_styleOverride -1
+  -> 0`, the ring gone, and the write back at the zoom's end. The decl writes worked there as on Steam (`scope
+  GUI 2 -> 0`, the zoomed reticle swapped).
 
 Only what is drawn changes: the zoom itself, its precision shot, speed and sensitivity are the game's. The
 game's decl values go back when the multiplayer guard trips (the zoom look's trip listener, at once: `zoom
